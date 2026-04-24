@@ -1,0 +1,18 @@
+# Secrets — NEVER commit these
+.env
+*.env.local
+
+# Pipeline temp files
+video_pipeline/tmp/
+video_pipeline/*.log
+video_pipeline/run_history.json
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db

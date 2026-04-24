@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<!-- CSP: only allow calls to own server (self). Claude API is proxied through backend. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'unsafe-inline';
+  style-src 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  connect-src 'self';
+  img-src 'self' data:;
+  frame-ancestors 'none';
+  form-action 'none';
+"/>
+<!-- BUG 10 FIX: CSRF token is injected here by the server at render time -->
+<!-- Server replaces %%CSRF_TOKEN%% with a real per-session token -->
+<meta name="csrf-token" content="%%CSRF_TOKEN%%"/>
+<title>FitBot — Personal Fitness Content Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#05050a;--bg2:#0c0c14;--bg3:#12121e;--bg4:#1a1a28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#eeeaf8;--muted:rgba(238,234,248,0.45);--dim:rgba(238,234,248,0.2);
+  --green:#00ff88;--green2:rgba(0,255,136,0.12);--green3:rgba(0,255,136,0.06);
+  --orange:#ff7c2a;--orange2:rgba(255,124,42,0.12);
+  --red:#ff4d6d;--red2:rgba(255,77,109,0.12);
+  --font:'DM Sans',sans-serif;--mono:'JetBrains Mono',monospace;--display:'Bebas Neue',sans-serif;
+  --r:10px;--r2:16px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}
+#loginPage{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:2rem;width:340px;text-align:center}
+.login-title{font-family:var(--display);font-size:28px;letter-spacing:0.04em;margin-bottom:0.5rem}
+.login-sub{font-size:12px;color:var(--muted);margin-bottom:1.5rem}
+.login-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.75rem 1rem;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;margin-bottom:0.75rem}
+.login-input:focus{border-color:var(--border2)}
+.login-btn{width:100%;background:var(--green);color:#05050a;border:none;padding:0.75rem;border-radius:var(--r);font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:opacity 0.2s}
+.login-btn:hover{opacity:0.85}
+.login-btn:disabled{opacity:0.3;cursor:not-allowed}
+.login-error{font-size:11px;color:var(--red);margin-top:0.75rem;min-height:16px}
+.login-note{font-size:10px;color:var(--muted);margin-top:1rem;line-height:1.5;text-align:left;background:var(--bg3);padding:0.75rem;border-radius:var(--r)}
+.shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.logo{padding:1.5rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.logo-icon{width:32px;height:32px;background:var(--green);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo-text{font-family:var(--display);font-size:18px;letter-spacing:0.04em}
+.nav{padding:1rem 0;flex:1}
+.nav-section{font-family:var(--mono);font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:var(--dim);padding:0.75rem 1.25rem 0.4rem}
+.nav-item{display:flex;align-items:center;gap:10px;padding:0.6rem 1.25rem;cursor:pointer;transition:all 0.15s;color:var(--muted);border-left:2px solid transparent;font-size:12px}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--green3);color:var(--green);border-left-color:var(--green)}
+.nav-icon{font-size:14px;width:16px;flex-shrink:0}
+.sidebar-footer{padding:1rem 1.25rem;border-top:1px solid var(--border);color:var(--muted);font-size:10px;font-family:var(--mono)}
+.sidebar-logout{background:none;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;padding:0.75rem 0;margin-top:0.75rem;transition:color 0.2s;width:100%;text-align:left;display:block}
+.sidebar-logout:hover{color:var(--red)}
+.main{display:flex;flex-direction:column}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:1.5rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.topbar-title{font-family:var(--display);font-size:22px;letter-spacing:0.04em}
+.topbar-subtitle{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase}
+.content{padding:2rem;flex:1;overflow-y:auto}
+.page{display:none}.page.active{display:block}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem;margin-bottom:1.5rem}
+.card-label{font-family:var(--mono);font-size:8px;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted);margin-bottom:0.75rem}
+.card-title{font-size:16px;font-weight:500;margin-bottom:0.5rem}
+.card-desc{font-size:12px;color:var(--muted);line-height:1.5}
+.input-group{margin-bottom:1rem}
+.lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:0.5rem;display:block}
+.inp{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.7rem 0.9rem;color:var(--text);font-family:var(--font);font-size:12px;outline:none;transition:border-color 0.2s}
+.inp:focus{border-color:var(--border2)}
+textarea.inp{resize:vertical;min-height:70px;font-family:var(--font)}
+.btn{background:var(--green);color:#05050a;border:none;padding:0.7rem 1.3rem;border-radius:var(--r);font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;margin-right:8px}
+.btn:hover{opacity:0.88;transform:translateY(-1px)}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.trend-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:1rem}
+.trend-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:1rem;cursor:pointer;transition:all 0.2s}
+.trend-card:hover{border-color:var(--border2);background:var(--bg4)}
+.trend-name{font-weight:500;font-size:13px;margin-bottom:0.4rem;line-height:1.3}
+.trend-src{font-size:11px;color:var(--muted)}
+.script-block{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1rem;font-size:12px;line-height:1.5;min-height:50px;border-left:3px solid var(--green);margin-bottom:0.75rem}
+.queue-list{display:flex;flex-direction:column;gap:8px;margin-top:1rem}
+.queue-item{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.9rem;display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;font-size:12px}
+.queue-platform{font-size:18px}
+.queue-title{font-weight:500}
+.queue-meta{font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+.queue-status{font-family:var(--mono);font-size:8px;padding:2px 8px;border-radius:20px;background:var(--green2);color:var(--green);text-transform:uppercase}
+.queue-delete{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:2px;transition:color 0.2s}
+.queue-delete:hover{color:var(--red)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
+.metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:0.9rem;text-align:center}
+.metric-num{font-family:var(--display);font-size:28px;line-height:1;color:var(--green);margin-bottom:0.4rem}
+.metric-label{font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)}
+.banner{background:rgba(255,124,42,0.1);border:1px solid rgba(255,124,42,0.3);border-radius:var(--r);padding:0.9rem;margin-bottom:1.5rem;font-size:11px;color:var(--orange);line-height:1.5}
+.logbox{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.75rem;font-family:var(--mono);font-size:9px;max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.log-line{display:flex;gap:6px;line-height:1.4}
+.log-time{color:var(--dim);flex-shrink:0}
+.log-success{color:var(--green)}.log-info{color:var(--muted)}.log-error{color:var(--red)}.log-warn{color:var(--orange)}
+.empty{text-align:center;padding:1.5rem;color:var(--dim);font-size:12px}
+.empty-icon{font-size:32px;margin-bottom:0.5rem;opacity:0.4}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div id="loginPage">
+  <div class="login-box">
+    <div class="login-title">FitBot</div>
+    <div class="login-sub">Private Content Studio</div>
+    <!--
+      BUG 4 NOTE: password is sent to backend over HTTPS, hashed server-side with bcrypt.
+      Never hash client-side — client-side hash just becomes the new plaintext password.
+      Correct pattern: send plaintext over HTTPS → bcrypt compare on server.
+    -->
+    <input type="email"    class="login-input" id="loginEmail"    placeholder="Email"    autocomplete="email"            onkeydown="if(event.key==='Enter')login()"/>
+    <input type="password" class="login-input" id="loginPassword" placeholder="Password" autocomplete="current-password" spellcheck="false" onkeydown="if(event.key==='Enter')login()"/>
+    <button class="login-btn" id="loginBtn" onclick="login()">Login</button>
+    <!-- BUG 3 FIX: error display uses a dedicated DOM element set via textContent -->
+    <div class="login-error" id="loginError"></div>
+    <div class="login-note">🔒 Secure server authentication. No API keys stored in browser.</div>
+  </div>
+</div>
+
+<!-- MAIN APP (hidden until login) -->
+<div class="shell" id="appShell" style="display:none">
+
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🔥</div>
+      <div class="logo-text">FitBot</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Studio</div>
+      <!-- BUG 7 FIX: nav items have data-page attributes, no fragile innerHTML selectors -->
+      <div class="nav-item active" data-page="research" onclick="showPage('research',this)"><span class="nav-icon">📊</span> Trends</div>
+      <div class="nav-item"        data-page="scripts"  onclick="showPage('scripts',this)"><span class="nav-icon">✍️</span>  Scripts</div>
+      <div class="nav-item"        data-page="video"    onclick="showPage('video',this)"><span class="nav-icon">🎬</span>  Video</div>
+      <div class="nav-item"        data-page="queue"    onclick="showPage('queue',this)"><span class="nav-icon">📅</span>  Queue</div>
+    </nav>
+    <div class="sidebar-footer">
+      💪 Mhed Fitness
+      <button class="sidebar-logout" onclick="logout()">⬅ Logout</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title" id="pageTitle">Trends</div>
+        <div class="topbar-subtitle" id="pageSub">Personal research studio</div>
+      </div>
+      <!-- BUG 3 FIX: user email set via textContent, never innerHTML -->
+      <span id="userDisplay" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></span>
+    </div>
+
+    <div class="content">
+
+      <!-- TRENDS PAGE -->
+      <div class="page active" id="page-research">
+        <div class="banner">📊 Add fitness trends you find on YouTube, TikTok Creative Center, Google Trends, or Social Blade. No API keys needed here.</div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-num" id="m-trends">0</div><div class="metric-label">Trends</div></div>
+          <div class="metric"><div class="metric-num" id="m-scripts">0</div><div class="metric-label">Scripts</div></div>
+          <div class="metric"><div class="metric-num" id="m-queue">0</div><div class="metric-label">Queued</div></div>
+          <div class="metric"><div class="metric-num" id="m-posted">0</div><div class="metric-label">Posted</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Add Trend</div>
+          <div class="input-group">
+            <label class="lbl" for="trendTopic">Trend Topic</label>
+            <input type="text" class="inp" id="trendTopic" placeholder="e.g., HIIT workouts" maxlength="80" autocomplete="off"/>
+          </div>
+          <div class="input-group">
+            <label class="lbl" for="trendSource">Source</label>
+            <select class="inp" id="trendSource">
+              <option value="">Select source</option>
+              <option value="YouTube">YouTube Trending</option>
+              <option value="TikTok">TikTok Creative Center</option>
+              <option value="Google Trends">Google Trends</option>
+              <option value="Social Blade">Social Blade</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label class="lbl" for="trendNotes">Notes</label>
+            <textarea class="inp" id="trendNotes" placeholder="Why is it trending?" maxlength="200"></textarea>
+          </div>
+          <button class="btn" onclick="addTrend()">+ Add Trend</button>
+        </div>
+
+        <div class="card">
+          <div class="card-label">Your Trends</div>
+          <div id="trendsContainer"><div class="empty"><div class="empty-icon">📊</div>No trends yet</div></div>
+        </div>
+      </div>
+
+      <!-- SCRIPTS PAGE -->
+      <div class="page" id="page-scripts">
+        <div class="banner">✍️ Pick a trend and Claude writes an original script — API key stays on the server.</div>
+        <div class="card">
+          <div class="card-label">Generate Script</div>
+          <div class="input-group">
+            <label class="lbl" for="trendSelect">Select Trend</label>
+            <select class="inp" id="trendSelect"></select>
+          </div>
+          <button class="btn" id="genBtn" onclick="generateScript()">Generate Script</button>
+        </div>
+
+        <div class="card" id="scriptOutput" style="display:none">
+          <div class="card-label">Generated Script</div>
+          <div class="input-group"><label class="lbl">Hook</label><div class="script-block" id="scriptHook"></div></div>
+          <div class="input-group"><label class="lbl">Body</label><div class="script-block" id="scriptBody"></div></div>
+          <div class="input-group"><label class="lbl">CTA</label><div class="script-block" id="scriptCTA"></div></div>
+          <div class="input-group">
+            <label class="lbl">Caption (editable)</label>
+            <textarea class="inp" id="scriptCaption" style="max-height:100px"></textarea>
+          </div>
+          <div class="input-group">
+            <label class="lbl">Video Prompt (for AI video)</label>
+            <textarea class="inp" id="scriptVideoPrompt" style="max-height:60px" placeholder="AI-generated scene description…"></textarea>
+          </div>
+          <button class="btn" onclick="queueScript()">📅 Queue</button>
+          <button class="btn" style="background:var(--bg3);color:var(--text)" onclick="generateScript()">🔄 Regenerate</button>
+          <button class="btn" style="background:var(--bg4);color:var(--green);border:1px solid var(--green)" id="makeVideoBtn" onclick="goMakeVideo()">🎬 Make Video</button>
+        </div>
+
+        <div class="logbox" id="scriptLog"></div>
+      </div>
+
+      <!-- VIDEO PAGE -->
+      <div class="page" id="page-video">
+        <div class="banner" id="videoBanner">🎬 Generate a short fitness video using WaveSpeed AI (LTX-2.3 — produces video + audio from text). Requires WAVESPEED_API_KEY in .env ($1 free credit at wavespeed.ai, no card to sign up).</div>
+        <div class="card">
+          <div class="card-label">Video Generation</div>
+          <div class="input-group">
+            <label class="lbl">Visual Prompt</label>
+            <textarea class="inp" id="videoPromptInput" rows="3" placeholder="e.g. A person doing HIIT workout in a bright gym, fast movements, motivational lighting…" maxlength="300"></textarea>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px">This is the scene description. Be specific about movement, setting, and lighting.</div>
+          </div>
+          <button class="btn" id="genVideoBtn" onclick="generateVideo()">🎬 Generate Video</button>
+          <div style="margin-top:1rem;font-size:11px;color:var(--muted)">Duration: 5 seconds · Format: 9:16 vertical (TikTok/Reels) · Quality: 720p</div>
+        </div>
+
+        <div class="card" id="videoOutput" style="display:none">
+          <div class="card-label">Generated Video</div>
+          <video id="videoPlayer" controls style="width:100%;max-width:360px;border-radius:var(--r);display:block;margin-bottom:1rem" playsinline></video>
+          <a id="videoDownload" class="btn" download="fitbot-video.mp4">⬇ Download MP4</a>
+          <button class="btn" style="background:var(--bg3);color:var(--text)" onclick="generateVideo()">🔄 Regenerate</button>
+        </div>
+
+        <div class="card" id="videoHistory">
+          <div class="card-label">Recent Videos</div>
+          <div id="videoList"><div class="empty"><div class="empty-icon">🎬</div>No videos yet</div></div>
+        </div>
+
+        <div class="logbox" id="videoLog"></div>
+      </div>
+
+      <!-- QUEUE PAGE -->
+      <div class="page" id="page-queue">
+        <div class="banner">📅 Posts scheduled across TikTok, Instagram, YouTube, Facebook.</div>
+        <div class="card">
+          <div class="card-label">Post Queue</div>
+          <div id="queueContainer"><div class="empty"><div class="empty-icon">📅</div>No posts queued</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════
+// SECURITY MODEL
+// ─ SESSION_TOKEN  : stored in memory only, cleared on refresh/logout
+// ─ CSRF_TOKEN     : injected by server into <meta> at page-load time
+//                    (not generated by JS — prevents CSRF completely)
+// ─ All API calls  : require both tokens in headers
+// ─ API keys       : never sent to browser, all Claude calls proxy through server
+// ════════════════════════════════════════════════════════════════
+
+let SESSION_TOKEN = null;
+
+// BUG 2 FIX: brute-force protection on login
+let loginAttempts = 0;
+const LOGIN_MAX = 5;
+let loginLockedUntil = 0;
+
+// BUG 10 FIX: read CSRF token from meta tag injected by server at render time
+function getCsrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
+const STATE = {
+  trends : [],
+  scripts: [],
+  queue  : [],
+  videos : [],
+  posted : 0
+};
+
+// ════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════
+
+// Escape ALL untrusted strings before innerHTML
+function esc(str) {
+  if (typeof str !== 'string') str = String(str ?? '');
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+// Strip dangerous chars from user-typed input
+function sanitize(str, max = 200) {
+  return (typeof str === 'string' ? str : '')
+    .replace(/[<>"'`\n\r]/g, '')
+    .trim()
+    .slice(0, max);
+}
+
+// Set text in any element safely (textContent only)
+function setText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = String(txt ?? '');
+}
+
+// BUG 3 FIX: all error display goes through this (textContent, never innerHTML)
+function showLoginError(msg) {
+  document.getElementById('loginError').textContent = sanitize(msg, 120);
+}
+
+// ════════════════════════════════════════════════════════════════
+// SECURE API HELPER
+// ════════════════════════════════════════════════════════════════
+async function apiCall(endpoint, method = 'GET', body = null) {
+  if (!SESSION_TOKEN) { logout(); return null; }
+
+  const opts = {
+    method,
+    headers: {
+      'Content-Type'  : 'application/json',
+      'Authorization' : `Bearer ${SESSION_TOKEN}`,
+      // BUG 10 FIX: CSRF token comes from server-injected meta tag
+      'X-CSRF-Token'  : getCsrfToken()
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+
+  const res = await fetch(endpoint, opts);
+  if (res.status === 401) { logout(); return null; }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(sanitize(err.error || 'Request failed', 200));
+  }
+  return await res.json();
+}
+
+// ════════════════════════════════════════════════════════════════
+// LOGIN / LOGOUT
+// ════════════════════════════════════════════════════════════════
+async function login() {
+  // BUG 2 FIX: client-side brute-force rate limiting
+  if (Date.now() < loginLockedUntil) {
+    const secs = Math.ceil((loginLockedUntil - Date.now()) / 1000);
+    showLoginError(`Too many attempts. Wait ${secs}s.`);
+    return;
+  }
+
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) { showLoginError('Email and password required'); return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = 'Logging in...';
+
+  try {
+    // BUG 4 NOTE: correct pattern — send over HTTPS, bcrypt on server
+    const res = await fetch('/auth/login', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ email, password })
+    });
+
+    if (!res.ok) {
+      loginAttempts++;
+      if (loginAttempts >= LOGIN_MAX) {
+        loginLockedUntil = Date.now() + 60_000; // 60s lockout
+        loginAttempts = 0;
+        showLoginError('Too many failed attempts. Locked for 60 seconds.');
+      } else {
+        const left = LOGIN_MAX - loginAttempts;
+        showLoginError(`Wrong credentials — ${left} attempt${left === 1 ? '' : 's'} left`);
+      }
+      return;
+    }
+
+    loginAttempts = 0;
+    const data = await res.json();
+    SESSION_TOKEN = data.token; // memory only — never localStorage
+
+    // Clear credentials from DOM immediately
+    document.getElementById('loginEmail').value    = '';
+    document.getElementById('loginPassword').value = '';
+
+    document.getElementById('loginPage').style.display  = 'none';
+    document.getElementById('appShell').style.display   = 'grid';
+    // BUG 3 FIX: textContent only
+    document.getElementById('userDisplay').textContent  = email;
+
+    slog('Authenticated successfully', 'success');
+    loadData();
+  } catch(e) {
+    showLoginError('Network error — check your connection');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Login';
+  }
+}
+
+function logout() {
+  SESSION_TOKEN    = null;
+  STATE.trends     = [];
+  STATE.scripts    = [];
+  STATE.queue      = [];
+  STATE.posted     = 0;
+  document.getElementById('appShell').style.display  = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('loginError').textContent  = '';
+}
+
+// ════════════════════════════════════════════════════════════════
+// LOAD SERVER DATA
+// ════════════════════════════════════════════════════════════════
+async function loadData() {
+  try {
+    const data = await apiCall('/api/user-data');
+    if (!data) return;
+    STATE.trends  = Array.isArray(data.trends)  ? data.trends  : [];
+    STATE.scripts = Array.isArray(data.scripts) ? data.scripts : [];
+    STATE.queue   = Array.isArray(data.queue)   ? data.queue   : [];
+    STATE.videos  = Array.isArray(data.videos)  ? data.videos  : [];
+    STATE.posted  = Number(data.posted) || 0;
+    renderTrends();
+    renderQueue();
+    updateMetrics();
+  } catch(e) {
+    slog('Load failed: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// NAVIGATION
+// BUG 7 FIX: showPage uses data-page attribute, not fragile innerHTML selector
+// ════════════════════════════════════════════════════════════════
+function showPage(id, el) {
+  const allowed = new Set(['research', 'scripts', 'video', 'queue']);
+  if (!allowed.has(id)) return;
+
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (el) el.classList.add('active');
+
+  const titles = { research: 'Trends', scripts: 'Scripts', video: 'Video Generator', queue: 'Queue' };
+  setText('pageTitle', titles[id]);
+
+  if (id === 'scripts') refreshTrendSelect();
+  if (id === 'queue')   renderQueue();
+  if (id === 'video')   renderVideoHistory();
+}
+
+// ════════════════════════════════════════════════════════════════
+// TRENDS
+// BUG 6 FIX: ALL fields from server data go through esc() before innerHTML
+// ════════════════════════════════════════════════════════════════
+async function addTrend() {
+  const topic  = sanitize(document.getElementById('trendTopic').value, 80);
+  const source = document.getElementById('trendSource').value;   // whitelist select
+  const notes  = sanitize(document.getElementById('trendNotes').value, 200);
+
+  if (!topic || !source) { alert('Topic and source are required'); return; }
+
+  // Whitelist sources — only values from the select are allowed
+  const allowedSources = new Set(['YouTube','TikTok','Google Trends','Social Blade']);
+  if (!allowedSources.has(source)) { alert('Invalid source'); return; }
+
+  try {
+    const result = await apiCall('/api/trends', 'POST', { topic, source, notes });
+    if (!result) return;
+    STATE.trends.push(result);
+    document.getElementById('trendTopic').value  = '';
+    document.getElementById('trendSource').value = '';
+    document.getElementById('trendNotes').value  = '';
+    renderTrends();
+    updateMetrics();
+    slog('Trend added: ' + topic, 'success');
+  } catch(e) {
+    slog('Error: ' + e.message, 'error');
+  }
+}
+
+function renderTrends() {
+  const container = document.getElementById('trendsContainer');
+  if (!STATE.trends.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>No trends yet</div>';
+    return;
+  }
+  // BUG 6 FIX: topic, source, and date all escaped
+  container.innerHTML = `<div class="trend-cards">${
+    STATE.trends.map((t, i) => `
+      <div class="trend-card" onclick="pickTrendForScript(${i})">
+        <div class="trend-name">${esc(t.topic)}</div>
+        <div class="trend-src">${esc(t.source)} · ${esc(new Date(t.date).toLocaleDateString())}</div>
+      </div>`
+    ).join('')
+  }</div>`;
+}
+
+// BUG 7 FIX: use data-page attribute to find nav item reliably
+function pickTrendForScript(i) {
+  if (typeof i !== 'number' || i < 0 || i >= STATE.trends.length) return;
+  document.getElementById('trendSelect').value = String(i);
+  const navEl = document.querySelector('.nav-item[data-page="scripts"]');
+  showPage('scripts', navEl);
+}
+
+function refreshTrendSelect() {
+  const sel = document.getElementById('trendSelect');
+  sel.innerHTML = STATE.trends.length
+    ? STATE.trends.map((t, i) => `<option value="${i}">${esc(t.topic)}</option>`).join('')
+    : '<option value="">No trends yet</option>';
+}
+
+// ════════════════════════════════════════════════════════════════
+// SCRIPTS
+// ════════════════════════════════════════════════════════════════
+async function generateScript() {
+  const idx = parseInt(document.getElementById('trendSelect').value, 10);
+  if (isNaN(idx) || idx < 0 || idx >= STATE.trends.length) {
+    alert('Please select a trend first'); return;
+  }
+
+  const trend = STATE.trends[idx];
+  slog('Generating script for: ' + trend.topic, 'info');
+
+  const btn = document.getElementById('genBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Generating…';
+
+  try {
+    const script = await apiCall('/api/generate-script', 'POST', {
+      trendId: trend.id,
+      topic  : trend.topic,
+      source : trend.source
+    });
+    if (!script) return;
+
+    // BUG 9 FIX: store a fresh copy — never mutate the object returned from server
+    window._currentScript = Object.assign({}, script);
+
+    // Use textContent for display (safe, no XSS possible)
+    document.getElementById('scriptHook').textContent    = script.hook    || '';
+    document.getElementById('scriptBody').textContent    = script.body    || '';
+    document.getElementById('scriptCTA').textContent     = script.cta     || '';
+    document.getElementById('scriptCaption').value       = script.caption || '';
+    document.getElementById('scriptVideoPrompt').value   = script.videoPrompt || '';
+
+    document.getElementById('scriptOutput').style.display = 'block';
+    slog('Script ready', 'success');
+  } catch(e) {
+    slog('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Generate Script';
+  }
+}
+
+async function queueScript() {
+  if (!window._currentScript) { alert('Generate a script first'); return; }
+
+  // BUG 9 FIX: work on a copy so _currentScript is never mutated
+  const scriptCopy = Object.assign({}, window._currentScript);
+  scriptCopy.caption = document.getElementById('scriptCaption').value.slice(0, 2200);
+
+  try {
+    const result = await apiCall('/api/queue', 'POST', { script: scriptCopy });
+    if (!result) return;
+    STATE.queue.push(result);
+    STATE.scripts.push(scriptCopy);
+    updateMetrics();
+    document.getElementById('scriptOutput').style.display = 'none';
+    slog('Added to queue', 'success');
+  } catch(e) {
+    slog('Queue error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// QUEUE
+// BUG 6 FIX: all fields escaped; BUG 8 FIX: index validated before splice
+// ════════════════════════════════════════════════════════════════
+const PLATFORM_ICONS = { TikTok:'🎵', Instagram:'📸', YouTube:'▶️', Facebook:'👍' };
+const ALLOWED_STATUSES = new Set(['queued','posted','failed']);
+
+function renderQueue() {
+  const container = document.getElementById('queueContainer');
+  if (!STATE.queue.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📅</div>No posts queued</div>';
+    return;
+  }
+  container.innerHTML = `<div class="queue-list">${
+    STATE.queue.map((q, i) => {
+      const safeStatus = ALLOWED_STATUSES.has(q.status) ? q.status : 'queued';
+      const icon = PLATFORM_ICONS[q.platform] || '📱';
+      return `<div class="queue-item">
+        <div class="queue-platform">${icon}</div>
+        <div>
+          <div class="queue-title">${esc(q.title)}</div>
+          <div class="queue-meta">${esc(q.platform)} · ${esc(new Date(q.date).toLocaleDateString())}</div>
+        </div>
+        <div class="queue-status">${safeStatus}</div>
+        <button class="queue-delete" onclick="deleteQueueItem(${i})">✕</button>
+      </div>`;
+    }).join('')
+  }</div>`;
+}
+
+async function deleteQueueItem(i) {
+  // BUG 8 FIX: validate index before use
+  if (typeof i !== 'number' || !isFinite(i) || i < 0 || i >= STATE.queue.length) return;
+  const item = STATE.queue[i];
+  try {
+    await apiCall(`/api/queue/${encodeURIComponent(item.id)}`, 'DELETE');
+    STATE.queue.splice(i, 1);
+    renderQueue();
+    updateMetrics();
+  } catch(e) {
+    slog('Delete failed: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// LOG (script tab)
+// BUG 5 FIX: build DOM nodes manually — no log-${type} innerHTML interpolation
+// ════════════════════════════════════════════════════════════════
+const ALLOWED_LOG_TYPES = new Set(['info','success','error','warn']);
+
+function slog(msg, type = 'info') {
+  const safeType = ALLOWED_LOG_TYPES.has(type) ? type : 'info';
+  const box = document.getElementById('scriptLog');
+  if (!box) return;
+
+  const now  = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+
+  const t = document.createElement('span');
+  t.className   = 'log-time';
+  t.textContent = now;
+
+  const m = document.createElement('span');
+  // BUG 5 FIX: className built from whitelist, never from user input
+  m.className   = 'log-' + safeType;
+  m.textContent = String(msg).slice(0, 300); // textContent — safe
+
+  line.appendChild(t);
+  line.appendChild(m);
+  box.appendChild(line);
+  while (box.children.length > 20) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ════════════════════════════════════════════════════════════════
+// METRICS
+// ════════════════════════════════════════════════════════════════
+function updateMetrics() {
+  setText('m-trends',  STATE.trends.length);
+  setText('m-scripts', STATE.scripts.length);
+  setText('m-queue',   STATE.queue.length);
+  setText('m-posted',  STATE.posted);
+}
+
+// Init
+updateMetrics();
+
+// ════════════════════════════════════════════════════════════════
+// VIDEO GENERATION — WaveSpeed LTX-2.3
+// ════════════════════════════════════════════════════════════════
+
+// Navigate to video page pre-filled with this script's video prompt
+function goMakeVideo() {
+  const prompt = document.getElementById('scriptVideoPrompt').value.trim();
+  if (prompt) document.getElementById('videoPromptInput').value = prompt;
+  const navEl = document.querySelector('.nav-item[data-page="video"]');
+  showPage('video', navEl);
+}
+
+async function generateVideo() {
+  const prompt = document.getElementById('videoPromptInput').value.trim();
+  if (!prompt) { alert('Enter a video prompt first'); return; }
+
+  const btn = document.getElementById('genVideoBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Generating… (up to 3 min)';
+
+  document.getElementById('videoOutput').style.display = 'none';
+  vlog('Submitting to WaveSpeed LTX-2.3…', 'info');
+  vlog('This takes 1–3 minutes — please wait', 'warn');
+
+  try {
+    const result = await apiCall('/api/generate-video', 'POST', { videoPrompt: prompt });
+    if (!result) return;
+
+    // Show video player
+    const player   = document.getElementById('videoPlayer');
+    const download = document.getElementById('videoDownload');
+    player.src  = result.videoUrl;
+    download.href = result.videoUrl;
+    document.getElementById('videoOutput').style.display = 'block';
+
+    // Store in STATE
+    STATE.videos.push(result);
+    renderVideoHistory();
+    vlog('Video ready! Click play to preview.', 'success');
+  } catch(e) {
+    vlog('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '🎬 Generate Video';
+  }
+}
+
+function renderVideoHistory() {
+  const container = document.getElementById('videoList');
+  if (!STATE.videos.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">🎬</div>No videos yet</div>';
+    return;
+  }
+  container.innerHTML = STATE.videos.slice().reverse().map((v, i) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:0.75rem 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:22px">🎬</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.prompt)}</div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">${new Date(v.createdAt).toLocaleString()}</div>
+      </div>
+      <a href="${esc(v.videoUrl)}" download="fitbot-video.mp4" class="btn" style="font-size:9px;padding:4px 10px">⬇</a>
+    </div>
+  `).join('');
+}
+
+function vlog(msg, type = 'info') {
+  const box = document.getElementById('videoLog');
+  if (!box) return;
+  const safeType = ALLOWED_LOG_TYPES.has(type) ? type : 'info';
+  const now = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const t = document.createElement('span'); t.className = 'log-time'; t.textContent = now;
+  const m = document.createElement('span'); m.className = 'log-' + safeType; m.textContent = String(msg).slice(0, 300);
+  line.appendChild(t); line.appendChild(m);
+  box.appendChild(line);
+  while (box.children.length > 20) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+</script>
+
+</body>
+</html>

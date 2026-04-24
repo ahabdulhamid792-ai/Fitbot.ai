@@ -1,0 +1,76 @@
+name: FitBot Daily Video Pipeline
+
+on:
+  schedule:
+    # Runs every day at 9:00 AM UTC
+    # To change time: https://crontab.guru
+    - cron: "0 9 * * *"
+
+  # Also allows manual trigger from GitHub → Actions tab
+  workflow_dispatch:
+
+jobs:
+  post-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Checkout code ────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Install ffmpeg ────────────────────────────────────
+      - name: Install ffmpeg and fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-google-font-poppins || \
+          sudo apt-get install -y ffmpeg fonts-open-sans || \
+          sudo apt-get install -y ffmpeg
+          # Ensure Poppins Bold is present (used for captions)
+          fc-list | grep -i poppins || echo "Poppins not found, fallback font will be used"
+
+      # ── 3. Set up Python ─────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 4. Install Python dependencies ───────────────────────
+      - name: Install dependencies
+        run: |
+          pip install -r video_pipeline/requirements.txt
+
+      # ── 5. Run pipeline ───────────────────────────────────────
+      # All secrets are stored in GitHub → Settings → Secrets → Actions
+      - name: Run FitBot pipeline
+        env:
+          GEMINI_API_KEY:            ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:            ${{ secrets.PEXELS_API_KEY }}
+          NICHE:                     ${{ secrets.NICHE }}
+          CHANNEL_NAME:              ${{ secrets.CHANNEL_NAME }}
+          VIDEO_DURATION:            "45"
+          TTS_VOICE:                 "en-US-GuyNeural"
+          VIDEO_RESOLUTION:          "1080p"
+          TIKTOK_ACCESS_TOKEN:       ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          INSTAGRAM_ACCOUNT_ID:      ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          INSTAGRAM_ACCESS_TOKEN:    ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          YOUTUBE_CLIENT_ID:         ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET:     ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN:     ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          FACEBOOK_PAGE_ID:          ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_ACCESS_TOKEN:     ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          VIDEO_CDN_URL:             ${{ secrets.VIDEO_CDN_URL }}
+        run: |
+          cd video_pipeline
+          python pipeline.py
+
+      # ── 6. Upload run log as artifact ─────────────────────────
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-log-${{ github.run_number }}
+          path: |
+            video_pipeline/pipeline.log
+            video_pipeline/run_history.json
+          retention-days: 30
