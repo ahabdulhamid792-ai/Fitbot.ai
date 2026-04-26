@@ -1,0 +1,29 @@
+# ════════════════════════════════════════════════════════════════
+# FITBOT — ENVIRONMENT VARIABLES
+# Copy this file to .env and fill in your values
+# NEVER commit .env to GitHub
+# ════════════════════════════════════════════════════════════════
+
+# ── SCRIPT GENERATION: Google Gemini (FREE, no card) ─────────
+# Get key at: https://aistudio.google.com → Get API Key
+GEMINI_API_KEY=AIzaSy_your_key_here
+
+# ── VIDEO GENERATION: WaveSpeed AI (free $1 credit, no card to sign up) ──
+# Get key at: https://wavespeed.ai → Sign up → Dashboard → API Keys
+# Free $1 credit given on signup — enough for ~5-10 test videos
+# Add more credit when you want more videos (pay as you go)
+# Leave blank to disable video tab
+WAVESPEED_API_KEY=your_wavespeed_key_here
+
+# ── DASHBOARD PASSWORD HASH ───────────────────────────────────
+# Run this to generate a hash of your chosen password:
+#   Mac/Linux: echo -n "yourpassword" | sha256sum
+#   Windows PowerShell: [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes("yourpassword"))).Replace("-","").ToLower()
+DASHBOARD_PASSWORD_HASH=paste_64_char_sha256_hash_here
+
+# ── SESSION SECRET (random string, min 32 chars) ──────────────
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+SESSION_SECRET=generate_a_random_32_char_string_here
+
+# ── SERVER PORT ───────────────────────────────────────────────
+PORT=3000
