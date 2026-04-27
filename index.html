@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mhed Fitness & Sports — Follow the Journey</title>
+<meta name="description" content="Daily fitness content, sports tips, and workout motivation across TikTok, Instagram, YouTube and Facebook. Follow Mhed Fitness & Sports." />
+<meta property="og:title" content="Mhed Fitness & Sports — Follow the Journey" />
+<meta property="og:description" content="Fitness content, sports tips and workout motivation posted every single day." />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet" />
+
+<style>
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+img { display: block; max-width: 100%; }
+
+/* ── Tokens ── */
+:root {
+  --bg: #080808;
+  --bg2: #0f0f0f;
+  --bg3: #161616;
+  --line: rgba(255,255,255,0.08);
+  --line2: rgba(255,255,255,0.15);
+  --text: #f0ede6;
+  --muted: rgba(240,237,230,0.45);
+  --accent: #e8ff47;
+  --accent2: #ff6b35;
+  --accent3: #00d4aa;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body: 'Crimson Pro', serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.65;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ── Custom cursor ── */
+.cursor {
+  position: fixed;
+  width: 10px; height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%,-50%);
+  transition: transform 0.1s, width 0.2s, height 0.2s;
+  mix-blend-mode: difference;
+}
+.cursor.expand { width: 40px; height: 40px; }
+
+/* ── Nav ── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 3rem;
+  border-bottom: 1px solid var(--line);
+  background: rgba(8,8,8,0.85);
+  backdrop-filter: blur(12px);
+}
+.nav-logo {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.nav-links {
+  display: flex;
+  gap: 2.5rem;
+  list-style: none;
+}
+.nav-links a {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-cta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--accent);
+  color: #080808;
+  border: none;
+  padding: 0.6rem 1.4rem;
+  cursor: none;
+  font-weight: 400;
+  transition: opacity 0.2s;
+}
+.nav-cta:hover { opacity: 0.85; }
+
+/* ── Hero ── */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 8rem 3rem 5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Grid background */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 80%);
+}
+
+/* Glowing orb */
+.hero-orb {
+  position: absolute;
+  top: 15%;
+  right: 8%;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232,255,71,0.12) 0%, rgba(232,255,71,0.04) 40%, transparent 70%);
+  animation: pulse 6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+/* Ticker */
+.ticker-wrap {
+  position: absolute;
+  top: 40%;
+  right: -20px;
+  transform: rotate(90deg) translateX(-50%);
+  transform-origin: right center;
+  overflow: hidden;
+  width: 320px;
+  opacity: 0.18;
+}
+.ticker {
+  display: flex;
+  gap: 3rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation: ticker 12s linear infinite;
+}
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Hero heading */
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.5rem;
+  opacity: 0;
+  animation: fadeUp 0.8s 0.2s forwards;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(72px, 10vw, 148px);
+  line-height: 0.92;
+  letter-spacing: 0.01em;
+  max-width: 900px;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.35s forwards;
+}
+.hero h1 em {
+  font-style: normal;
+  color: var(--accent);
+  display: block;
+}
+.hero-sub {
+  font-size: clamp(16px, 1.6vw, 20px);
+  color: var(--muted);
+  max-width: 520px;
+  margin-top: 2rem;
+  font-weight: 300;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.5s forwards;
+}
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-top: 3rem;
+  opacity: 0;
+  animation: fadeUp 0.9s 0.65s forwards;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--accent);
+  color: #080808;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 1rem 2rem;
+  text-decoration: none;
+  cursor: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(232,255,71,0.25);
+}
+.btn-ghost {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  cursor: none;
+  transition: color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-ghost:hover { color: var(--text); }
+
+/* Scroll indicator */
+.scroll-hint {
+  position: absolute;
+  bottom: 2.5rem;
+  right: 3rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0;
+  animation: fadeUp 1s 1s forwards;
+}
+.scroll-line {
+  width: 48px;
+  height: 1px;
+  background: var(--line2);
+  position: relative;
+  overflow: hidden;
+}
+.scroll-line::after {
+  content: '';
+  position: absolute;
+  left: -100%;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  animation: slideLine 2s ease-in-out infinite;
+}
+@keyframes slideLine {
+  from { left: -100%; }
+  to { left: 100%; }
+}
+
+/* ── Stats bar ── */
+.stats-bar {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--bg2);
+}
+.stat {
+  padding: 2.5rem 3rem;
+  border-right: 1px solid var(--line);
+}
+.stat:last-child { border-right: none; }
+.stat-number {
+  font-family: var(--font-display);
+  font-size: 56px;
+  line-height: 1;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.stat-number span { color: var(--accent); }
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 0.5rem;
+}
+
+/* ── Section base ── */
+section {
+  padding: 7rem 3rem;
+  position: relative;
+}
+.section-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-tag::before {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+}
+h2 {
+  font-family: var(--font-display);
+  font-size: clamp(48px, 6vw, 88px);
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+}
+h3 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+}
+
+/* ── How it works ── */
+.how-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-top: 5rem;
+  border: 1px solid var(--line);
+}
+.how-step {
+  padding: 3rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+  transition: background 0.3s;
+}
+.how-step:hover { background: var(--bg3); }
+.how-step:nth-child(2n) { border-right: none; }
+.how-step:nth-child(3), .how-step:nth-child(4) { border-bottom: none; }
+.step-num {
+  font-family: var(--font-display);
+  font-size: 96px;
+  line-height: 1;
+  color: var(--line2);
+  position: absolute;
+  top: 1rem;
+  right: 1.5rem;
+  letter-spacing: 0;
+  transition: color 0.3s;
+}
+.how-step:hover .step-num { color: rgba(232,255,71,0.1); }
+.step-icon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  font-size: 20px;
+}
+.step-body { color: var(--muted); font-size: 17px; font-weight: 300; max-width: 320px; }
+
+/* ── Platforms ── */
+.platforms-section { background: var(--bg2); }
+.platforms-scroll {
+  display: flex;
+  gap: 1px;
+  background: var(--line);
+  margin-top: 4rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.platform-card {
+  flex: 1;
+  background: var(--bg2);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  transition: background 0.25s;
+  min-width: 130px;
+}
+.platform-card:hover { background: var(--bg3); }
+.platform-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  font-size: 22px;
+}
+.platform-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+.platform-free {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent3);
+  letter-spacing: 0.1em;
+}
+
+/* ── Content preview ── */
+.posts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 4rem;
+}
+.post-card {
+  background: var(--bg);
+  padding: 2rem;
+  transition: background 0.25s;
+}
+.post-card:hover { background: var(--bg3); }
+.post-platform {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1rem;
+}
+.post-text {
+  font-size: 15px;
+  color: var(--muted);
+  line-height: 1.6;
+  font-weight: 300;
+  margin-bottom: 1rem;
+}
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent3);
+  letter-spacing: 0.08em;
+}
+
+/* ── Email capture ── */
+.email-section {
+  background: var(--accent);
+  color: #080808;
+}
+.email-section .section-tag { color: #080808; opacity: 0.5; }
+.email-section .section-tag::before { background: #080808; opacity: 0.5; }
+.email-section h2 { color: #080808; }
+.email-section p { color: rgba(8,8,8,0.6); font-size: 18px; font-weight: 300; max-width: 480px; margin-top: 1.25rem; }
+.email-form {
+  display: flex;
+  gap: 0;
+  margin-top: 3rem;
+  max-width: 480px;
+  border: 1.5px solid rgba(8,8,8,0.3);
+}
+.email-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 1rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #080808;
+  letter-spacing: 0.05em;
+}
+.email-input::placeholder { color: rgba(8,8,8,0.4); }
+.email-submit {
+  background: #080808;
+  color: var(--accent);
+  border: none;
+  padding: 1rem 1.75rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: none;
+  transition: opacity 0.2s;
+}
+.email-submit:hover { opacity: 0.85; }
+.email-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(8,8,8,0.4);
+  margin-top: 1rem;
+  letter-spacing: 0.08em;
+}
+
+/* ── Social links ── */
+.social-section { background: var(--bg2); }
+.social-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 4rem;
+}
+.social-link {
+  background: var(--bg2);
+  padding: 2.5rem 1.5rem;
+  text-decoration: none;
+  text-align: center;
+  display: block;
+  transition: background 0.25s, transform 0.25s;
+  cursor: none;
+}
+.social-link:hover { background: var(--bg3); transform: translateY(-4px); }
+.social-emoji { font-size: 28px; margin-bottom: 0.75rem; }
+.social-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.social-handle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 4px;
+  letter-spacing: 0.05em;
+}
+
+/* ── FAQ ── */
+.faq-list { margin-top: 4rem; border-top: 1px solid var(--line); }
+.faq-item {
+  border-bottom: 1px solid var(--line);
+  padding: 2rem 0;
+  cursor: none;
+}
+.faq-q {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: 0.04em;
+  cursor: none;
+}
+.faq-indicator {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--muted);
+  transition: transform 0.3s, color 0.3s;
+  flex-shrink: 0;
+}
+.faq-item.open .faq-indicator { transform: rotate(45deg); color: var(--accent); }
+.faq-a {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease, padding 0.3s;
+  color: var(--muted);
+  font-size: 17px;
+  font-weight: 300;
+  line-height: 1.7;
+}
+.faq-item.open .faq-a { max-height: 300px; padding-top: 1.25rem; }
+
+/* ── Footer ── */
+footer {
+  border-top: 1px solid var(--line);
+  padding: 3rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg);
+}
+.footer-logo {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.footer-copy {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+/* ── Animations on scroll ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.reveal.visible { opacity: 1; transform: none; }
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  body { cursor: auto; }
+  .cursor { display: none; }
+  nav { padding: 1rem 1.5rem; }
+  .nav-links { display: none; }
+  .hero { padding: 7rem 1.5rem 4rem; }
+  section { padding: 5rem 1.5rem; }
+  .stats-bar { grid-template-columns: 1fr 1fr; }
+  .stat { border-right: none; border-bottom: 1px solid var(--line); }
+  .stat:nth-child(odd) { border-right: 1px solid var(--line); }
+  .how-grid { grid-template-columns: 1fr; }
+  .how-step { border-right: none; }
+  .how-step:nth-child(n) { border-bottom: 1px solid var(--line); }
+  .how-step:last-child { border-bottom: none; }
+  .posts-grid { grid-template-columns: 1fr; }
+  .social-grid { grid-template-columns: repeat(3, 1fr); }
+  .platforms-scroll { overflow-x: auto; }
+  footer { flex-direction: column; gap: 1rem; text-align: center; }
+}
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--accent);
+  color: #080808;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  padding: 0.875rem 1.75rem;
+  z-index: 999;
+  transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- Custom cursor -->
+<div class="cursor" id="cursor"></div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast">Plan sent! Check your inbox. 💪</div>
+
+<!-- ── Nav ── -->
+<nav>
+  <a href="#" class="nav-logo">Mhed Fitness & Sports</a>
+  <ul class="nav-links">
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#platforms">Platforms</a></li>
+    <li><a href="#content">Content</a></li>
+    <li><a href="#faq">FAQ</a></li>
+  </ul>
+  <a href="#join" class="nav-cta">Get early access</a>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="hero-orb"></div>
+  <div class="ticker-wrap">
+    <div class="ticker">
+      <span>Twitter · Instagram · Facebook · LinkedIn · YouTube · TikTok ·&nbsp;</span>
+      <span>Twitter · Instagram · Facebook · LinkedIn · YouTube · TikTok ·&nbsp;</span>
+    </div>
+  </div>
+
+  <p class="hero-eyebrow">Fitness · Sports · Motivation</p>
+  <h1>Train hard.<em>Live harder.</em></h1>
+  <p class="hero-sub">
+    Daily fitness content, sports tips, and workout motivation — posted across TikTok, Instagram, YouTube, and Facebook every single day. Follow the journey.
+  </p>
+  <div class="hero-actions">
+    <a href="#follow" class="btn-primary">
+      <span>Follow on all platforms</span>
+      <span>→</span>
+    </a>
+    <a href="#content" class="btn-ghost">See my content <span>↓</span></a>
+  </div>
+
+  <div class="scroll-hint">
+    <div class="scroll-line"></div>
+    <span>Scroll</span>
+  </div>
+</section>
+
+<!-- ── Stats ── -->
+<div class="stats-bar">
+  <div class="stat reveal">
+    <div class="stat-number">4<span>+</span></div>
+    <div class="stat-label">Platforms posting daily</div>
+  </div>
+  <div class="stat reveal reveal-delay-1">
+    <div class="stat-number">365</div>
+    <div class="stat-label">Days of content / year</div>
+  </div>
+  <div class="stat reveal reveal-delay-2">
+    <div class="stat-number">100<span>%</span></div>
+    <div class="stat-label">Fitness & sports focused</div>
+  </div>
+  <div class="stat reveal reveal-delay-3">
+    <div class="stat-number">0<span>$</span></div>
+    <div class="stat-label">Cost to follow along</div>
+  </div>
+</div>
+
+<!-- ── How it works ── -->
+<section id="how">
+  <p class="section-tag reveal">What you get</p>
+  <h2 class="reveal">Why follow<br>Mhed?</h2>
+
+  <div class="how-grid">
+    <div class="how-step reveal">
+      <div class="step-num">01</div>
+      <div class="step-icon">💪</div>
+      <h3>Daily Workouts</h3>
+      <p class="step-body">Home workouts, gym sessions, and sport drills posted every day — with proper form breakdowns so you can follow along no matter your level.</p>
+    </div>
+    <div class="how-step reveal reveal-delay-1">
+      <div class="step-num">02</div>
+      <div class="step-icon">🏆</div>
+      <h3>Sports Training</h3>
+      <p class="step-body">Agility drills, speed work, and sport-specific conditioning to help you perform better on the field, court, or track.</p>
+    </div>
+    <div class="how-step reveal reveal-delay-2">
+      <div class="step-num">03</div>
+      <div class="step-icon">🥗</div>
+      <h3>Nutrition Tips</h3>
+      <p class="step-body">Simple, practical eating advice for athletes and fitness enthusiasts. No fads — just what actually fuels performance and recovery.</p>
+    </div>
+    <div class="how-step reveal reveal-delay-3">
+      <div class="step-num">04</div>
+      <div class="step-icon">🔥</div>
+      <h3>Motivation</h3>
+      <p class="step-body">Daily mindset content to keep you consistent. Because showing up is 80% of the battle — and you deserve a community that shows up with you.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── Platforms ── -->
+<section class="platforms-section" id="platforms">
+  <p class="section-tag reveal">Platforms</p>
+  <h2 class="reveal">Every channel.<br>One system.</h2>
+
+  <div class="platforms-scroll reveal">
+    <div class="platform-card">
+      <div class="platform-icon" style="background:rgba(0,0,0,0.5);">𝕏</div>
+      <div class="platform-name">Twitter / X</div>
+      <div class="platform-free">1,500/mo free</div>
+    </div>
+    <div class="platform-card">
+      <div class="platform-icon" style="background:rgba(225,48,108,0.15);">📸</div>
+      <div class="platform-name">Instagram</div>
+      <div class="platform-free">Unlimited free</div>
+    </div>
+    <div class="platform-card">
+      <div class="platform-icon" style="background:rgba(24,119,242,0.15);">👍</div>
+      <div class="platform-name">Facebook</div>
+      <div class="platform-free">Unlimited free</div>
+    </div>
+    <div class="platform-card">
+      <div class="platform-icon" style="background:rgba(255,0,0,0.15);">▶️</div>
+      <div class="platform-name">YouTube</div>
+      <div class="platform-free">10k units/day</div>
+    </div>
+    <div class="platform-card">
+      <div class="platform-icon" style="background:rgba(1,1,1,0.5);">🎵</div>
+      <div class="platform-name">TikTok</div>
+      <div class="platform-free">Unlimited free</div>
+    </div>
+    <div class="platform-card">
+      <div class="platform-icon" style="background:rgba(10,102,194,0.15);">💼</div>
+      <div class="platform-name">LinkedIn</div>
+      <div class="platform-free">500/day free</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Content preview ── -->
+<section id="content">
+  <p class="section-tag reveal">Content preview</p>
+  <h2 class="reveal">Real posts.<br>Every platform.</h2>
+  <p class="reveal" style="color: var(--muted); max-width:520px; margin-top:1.25rem; font-size:18px; font-weight:300;">
+    A sample of what goes out daily across Mhed Fitness & Sports channels.
+  </p>
+
+  <div class="posts-grid">
+    <div class="post-card reveal">
+      <div class="post-platform">TikTok Script</div>
+      <p class="post-text"><em style="color:var(--accent);font-style:normal;">Hook:</em> "You don't need a gym to build a strong body. Here's the 5-move home workout I do every morning." <em style="color:var(--accent);font-style:normal;">Duration:</em> 45 sec</p>
+      <div class="post-tags">
+        <span class="tag">#HomeWorkout</span>
+        <span class="tag">#FitnessTips</span>
+        <span class="tag">#NoGym</span>
+      </div>
+    </div>
+    <div class="post-card reveal reveal-delay-1">
+      <div class="post-platform">Instagram Caption</div>
+      <p class="post-text">"Progress isn't always visible. Some days the win is just showing up. Keep going. 💪 Save this for the days you feel like quitting."</p>
+      <div class="post-tags">
+        <span class="tag">#FitnessMotivation</span>
+        <span class="tag">#MindsetMatters</span>
+        <span class="tag">#GrindMode</span>
+      </div>
+    </div>
+    <div class="post-card reveal reveal-delay-2">
+      <div class="post-platform">Facebook</div>
+      <p class="post-text">"3 sports drills that improved my agility in just 2 weeks. No equipment needed. Drop a '🔥' in the comments if you want the full video breakdown!"</p>
+      <div class="post-tags">
+        <span class="tag">#SportsTraining</span>
+        <span class="tag">#Agility</span>
+        <span class="tag">#AthleteLife</span>
+      </div>
+    </div>
+    <div class="post-card reveal">
+      <div class="post-platform">YouTube Community</div>
+      <p class="post-text">"Quick poll: What's your main fitness goal right now? A) Lose weight B) Build muscle C) Improve stamina D) Just stay active — Comment below! 👇"</p>
+      <div class="post-tags">
+        <span class="tag">#FitnessGoals</span>
+        <span class="tag">#Community</span>
+      </div>
+    </div>
+    <div class="post-card reveal reveal-delay-1">
+      <div class="post-platform">TikTok Script</div>
+      <p class="post-text"><em style="color:var(--accent);font-style:normal;">Hook:</em> "Eating right is 70% of your results. Here's what I eat in a day as an athlete." <em style="color:var(--accent);font-style:normal;">Duration:</em> 60 sec</p>
+      <div class="post-tags">
+        <span class="tag">#WhatIEatInADay</span>
+        <span class="tag">#AthleteNutrition</span>
+      </div>
+    </div>
+    <div class="post-card reveal reveal-delay-2">
+      <div class="post-platform">Instagram Caption</div>
+      <p class="post-text">"Rest day doesn't mean lazy day. Recovery is where growth actually happens. Here's how I spend mine 🧘 — active recovery, hydration, and mental reset."</p>
+      <div class="post-tags">
+        <span class="tag">#RestDay</span>
+        <span class="tag">#Recovery</span>
+        <span class="tag">#FitnessLifestyle</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Email capture ── -->
+<section class="email-section" id="join">
+  <p class="section-tag reveal">Stay connected</p>
+  <h2 class="reveal">Get my free<br>workout plan.</h2>
+  <p class="reveal">Drop your email and I'll send you my 4-week beginner fitness plan — free, no strings attached.</p>
+
+  <form class="email-form reveal" id="emailForm" onsubmit="handleSubmit(event)">
+    <input type="email" class="email-input" id="emailInput" placeholder="your@email.com" required />
+    <button type="submit" class="email-submit">Send it →</button>
+  </form>
+  <p class="email-note reveal">No spam. Just fitness content and your free plan.</p>
+</section>
+
+<!-- ── Social links ── -->
+<section class="social-section" id="follow">
+  <p class="section-tag reveal">Follow along</p>
+  <h2 class="reveal">Find me<br>everywhere.</h2>
+
+  <div class="social-grid">
+    <a href="https://www.tiktok.com/@mhedfitnessandsports0" class="social-link reveal" target="_blank">
+      <div class="social-emoji">🎵</div>
+      <div class="social-name">TikTok</div>
+      <div class="social-handle">@mhedfitnessandsports0</div>
+    </a>
+    <a href="https://www.instagram.com/Mhed_fitness_20" class="social-link reveal reveal-delay-1" target="_blank">
+      <div class="social-emoji">📸</div>
+      <div class="social-name">Instagram</div>
+      <div class="social-handle">@Mhed_fitness_20</div>
+    </a>
+    <a href="https://www.youtube.com/@MHEDFITNESSANDSPORTS" class="social-link reveal reveal-delay-2" target="_blank">
+      <div class="social-emoji">▶️</div>
+      <div class="social-name">YouTube</div>
+      <div class="social-handle">MHED FITNESS AND SPORTS</div>
+    </a>
+    <a href="https://www.facebook.com/share/1DJTv3HLXq/?mibextid=wwXIfr" class="social-link reveal reveal-delay-3" target="_blank">
+      <div class="social-emoji">👍</div>
+      <div class="social-name">Facebook</div>
+      <div class="social-handle">Mhed Fitness & Sports</div>
+    </a>
+  </div>
+</section>
+
+<!-- ── FAQ ── -->
+<section id="faq">
+  <p class="section-tag reveal">FAQ</p>
+  <h2 class="reveal">Questions.</h2>
+
+  <div class="faq-list reveal">
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">
+        <span>What kind of content do you post?</span>
+        <span class="faq-indicator">+</span>
+      </div>
+      <div class="faq-a">Daily workouts, sports drills, nutrition tips, athlete motivation, and behind-the-scenes training content — posted every day across TikTok, Instagram, YouTube, and Facebook.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">
+        <span>Is the content suitable for beginners?</span>
+        <span class="faq-indicator">+</span>
+      </div>
+      <div class="faq-a">Absolutely. The content is made for all levels — beginner to advanced. Every workout comes with modifications so you can follow along no matter where you're starting from.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">
+        <span>Which platform should I follow first?</span>
+        <span class="faq-indicator">+</span>
+      </div>
+      <div class="faq-a">TikTok and Instagram get the most frequent short-form workout clips. YouTube has the longer full workout videos. Facebook has community posts and tips. Follow all four to never miss a post!</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">
+        <span>How do I get the free workout plan?</span>
+        <span class="faq-indicator">+</span>
+      </div>
+      <div class="faq-a">Just enter your email in the form above. The 4-week beginner fitness plan will be sent straight to your inbox — completely free, no credit card, no catch.</div>
+    </div>
+    <div class="faq-item" onclick="toggleFaq(this)">
+      <div class="faq-q">
+        <span>Can I suggest workout topics?</span>
+        <span class="faq-indicator">+</span>
+      </div>
+      <div class="faq-a">Yes! Drop a comment on any post or send a DM on Instagram or TikTok. Audience suggestions are taken seriously — some of the best content comes directly from the community.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="footer-logo">Mhed Fitness & Sports</div>
+  <div class="footer-copy">TikTok · Instagram · YouTube · Facebook · Posting daily</div>
+</footer>
+
+<script>
+// ── Cursor ──
+const cursor = document.getElementById("cursor");
+document.addEventListener("mousemove", e => {
+  cursor.style.left = e.clientX + "px";
+  cursor.style.top = e.clientY + "px";
+});
+document.querySelectorAll("a,button,input,.faq-item,.platform-card,.post-card,.social-link,.how-step").forEach(el => {
+  el.addEventListener("mouseenter", () => cursor.classList.add("expand"));
+  el.addEventListener("mouseleave", () => cursor.classList.remove("expand"));
+});
+
+// ── Scroll reveal ──
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add("visible"); });
+}, { threshold: 0.1 });
+document.querySelectorAll(".reveal").forEach(el => observer.observe(el));
+
+// ── FAQ ──
+function toggleFaq(item) {
+  const isOpen = item.classList.contains("open");
+  document.querySelectorAll(".faq-item").forEach(i => i.classList.remove("open"));
+  if (!isOpen) item.classList.add("open");
+}
+
+// ── Email form ──
+function handleSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById("emailInput").value;
+  if (!email) return;
+
+  // Save locally — replace this with your actual email service
+  // (Mailchimp, ConvertKit, Resend, Loops, etc.)
+  const stored = JSON.parse(localStorage.getItem("waitlist") || "[]");
+  stored.push({ email, date: new Date().toISOString() });
+  localStorage.setItem("waitlist", JSON.stringify(stored));
+
+  // Show toast
+  const toast = document.getElementById("toast");
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 4000);
+
+  // Reset form
+  document.getElementById("emailForm").reset();
+
+  // Log to console (connect to your email provider API here)
+  console.log("New signup:", email);
+}
+
+// ── Smooth nav scroll ──
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener("click", e => {
+    const target = document.querySelector(a.getAttribute("href"));
+    if (target) { e.preventDefault(); target.scrollIntoView({ behavior: "smooth" }); }
+  });
+});
+</script>
+</body>
+</html>
