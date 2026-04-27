@@ -2,12 +2,8 @@ name: FitBot Daily Video Pipeline
 
 on:
   schedule:
-    # Runs every day at 9:00 AM UTC
-    # To change time: https://crontab.guru
-    - cron: "0 9 * * *"
-
-  # Also allows manual trigger from GitHub → Actions tab
-  workflow_dispatch:
+    - cron: "0 9 * * *"   # 9:00 AM UTC daily (9:00 AM Ghana time)
+  workflow_dispatch:       # manual trigger from Actions tab
 
 jobs:
   post-video:
@@ -15,56 +11,74 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # ── 1. Checkout code ────────────────────────────────────
+
+      # ── 1. Checkout ──────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Install ffmpeg ────────────────────────────────────
+      # ── 2. Install ffmpeg + fonts ────────────────────────────────
       - name: Install ffmpeg and fonts
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg fonts-google-font-poppins || \
-          sudo apt-get install -y ffmpeg fonts-open-sans || \
-          sudo apt-get install -y ffmpeg
-          # Ensure Poppins Bold is present (used for captions)
-          fc-list | grep -i poppins || echo "Poppins not found, fallback font will be used"
+          sudo apt-get install -y ffmpeg fonts-liberation || true
+          # Try to get Poppins — fallback to Liberation Sans if unavailable
+          sudo apt-get install -y fonts-google-font-poppins 2>/dev/null || true
+          echo "Fonts available:"
+          fc-list | grep -i "poppins\|liberation" | head -5 || echo "Using default fonts"
 
-      # ── 3. Set up Python ─────────────────────────────────────
+      # ── 3. Python 3.11 ──────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ── 4. Install Python dependencies ───────────────────────
+      # ── 4. Install Python packages ───────────────────────────────
       - name: Install dependencies
         run: |
+          pip install --upgrade pip
           pip install -r video_pipeline/requirements.txt
+          echo "Packages installed:"
+          pip list | grep -i "requests\|edge\|google\|pillow\|nest"
 
-      # ── 5. Run pipeline ───────────────────────────────────────
-      # All secrets are stored in GitHub → Settings → Secrets → Actions
+      # ── 5. Verify secrets are present ───────────────────────────
+      - name: Check required secrets
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "ERROR: GEMINI_API_KEY secret is missing or empty"
+            exit 1
+          fi
+          if [ -z "$PEXELS_API_KEY" ]; then
+            echo "ERROR: PEXELS_API_KEY secret is missing or empty"
+            exit 1
+          fi
+          echo "Required secrets present"
+
+      # ── 6. Run pipeline ──────────────────────────────────────────
       - name: Run FitBot pipeline
         env:
-          GEMINI_API_KEY:            ${{ secrets.GEMINI_API_KEY }}
-          PEXELS_API_KEY:            ${{ secrets.PEXELS_API_KEY }}
-          NICHE:                     ${{ secrets.NICHE }}
-          CHANNEL_NAME:              ${{ secrets.CHANNEL_NAME }}
-          VIDEO_DURATION:            "45"
-          TTS_VOICE:                 "en-US-GuyNeural"
-          VIDEO_RESOLUTION:          "1080p"
-          TIKTOK_ACCESS_TOKEN:       ${{ secrets.TIKTOK_ACCESS_TOKEN }}
-          INSTAGRAM_ACCOUNT_ID:      ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
-          INSTAGRAM_ACCESS_TOKEN:    ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          YOUTUBE_CLIENT_ID:         ${{ secrets.YOUTUBE_CLIENT_ID }}
-          YOUTUBE_CLIENT_SECRET:     ${{ secrets.YOUTUBE_CLIENT_SECRET }}
-          YOUTUBE_REFRESH_TOKEN:     ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          FACEBOOK_PAGE_ID:          ${{ secrets.FACEBOOK_PAGE_ID }}
-          FACEBOOK_ACCESS_TOKEN:     ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
-          VIDEO_CDN_URL:             ${{ secrets.VIDEO_CDN_URL }}
+          GEMINI_API_KEY:          ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:          ${{ secrets.PEXELS_API_KEY }}
+          CLOUDINARY_URL:          ${{ secrets.CLOUDINARY_URL }}
+          NICHE:                   ${{ secrets.NICHE }}
+          CHANNEL_NAME:            ${{ secrets.CHANNEL_NAME }}
+          VIDEO_DURATION:          "45"
+          TTS_VOICE:               "en-US-GuyNeural"
+          TIKTOK_ACCESS_TOKEN:     ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          INSTAGRAM_ACCOUNT_ID:    ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          INSTAGRAM_ACCESS_TOKEN:  ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          YOUTUBE_CLIENT_ID:       ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET:   ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN:   ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          FACEBOOK_PAGE_ID:        ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_ACCESS_TOKEN:   ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
         run: |
           cd video_pipeline
           python pipeline.py
 
-      # ── 6. Upload run log as artifact ─────────────────────────
+      # ── 7. Upload logs (even if pipeline failed) ─────────────────
       - name: Upload run log
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,4 +87,5 @@ jobs:
           path: |
             video_pipeline/pipeline.log
             video_pipeline/run_history.json
+          if-no-files-found: warn
           retention-days: 30
