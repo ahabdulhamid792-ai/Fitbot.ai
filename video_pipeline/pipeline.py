@@ -153,7 +153,7 @@ def _validate_cdn_url(url: str) -> bool:
     except Exception:
         return False
 
-def _download_file(url: str, dest: Path, timeout: int = 90) -> bool:
+def _download_file(url: str, dest: Path, timeout: int = 30) -> bool:
     """Stream-download with timeout — never hangs."""
     try:
         with requests.get(url, stream=True, timeout=timeout) as r:
@@ -550,7 +550,7 @@ def fetch_pexels_videos(keywords: list, target_duration: int) -> list:
             "per_page": 15,
         })
         try:
-            resp = requests.get(url, headers=headers, timeout=15)
+            resp = requests.get(url, headers=headers, timeout=10)
             resp.raise_for_status()
             videos = resp.json().get("videos", [])
         except Exception as e:
