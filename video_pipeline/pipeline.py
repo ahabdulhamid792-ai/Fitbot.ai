@@ -259,7 +259,7 @@ def _pick_formula() -> str:
 GEMINI_MODELS = [
     "gemini-2.0-flash",          # Primary — fastest, free tier 1500/day
     "gemini-1.5-flash",          # Fallback 1 — very stable, free tier
-    "gemini-1.5-flash-8b",       # Fallback 2 — lightweight, highest free quota
+    "gemini-1.5-flash-latest",       # Fallback 2 — lightweight, highest free quota
 ]
 
 def _call_gemini_with_retry(prompt: str, max_retries: int = 3) -> dict:
