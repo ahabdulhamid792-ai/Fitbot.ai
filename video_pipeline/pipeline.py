@@ -154,7 +154,7 @@ def _validate_cdn_url(url: str) -> bool:
         return False
 
 def _download_file(url: str, dest: Path, timeout: int = 30) -> bool:
-    """Stream-download with timeout — never hangs."""
+    """Stream-download with strict timeout — never hangs the pipeline."""
     try:
         with requests.get(url, stream=True, timeout=timeout) as r:
             r.raise_for_status()
@@ -252,10 +252,131 @@ def _pick_formula() -> str:
     day_index = int(hashlib.md5(datetime.utcnow().strftime("%Y-%m-%d").encode()).hexdigest(), 16)
     return TITLE_FORMULAS[day_index % len(TITLE_FORMULAS)]
 
+# ── Gemini model fallback chain ───────────────────────────────
+# If the primary model hits quota, automatically tries the next one.
+# All models listed are FREE on the Google AI Studio free tier.
+# Order: fastest/newest first → stable fallbacks → last resort
+GEMINI_MODELS = [
+    "gemini-2.0-flash",          # Primary — fastest, free tier 1500/day
+    "gemini-1.5-flash",          # Fallback 1 — very stable, free tier
+    "gemini-1.5-flash-8b",       # Fallback 2 — lightweight, highest free quota
+    "gemini-1.0-pro",            # Fallback 3 — older but reliable
+]
+
+def _call_gemini_with_retry(prompt: str, max_retries: int = 3) -> dict:
+    """
+    Call Gemini API with:
+    - Automatic model fallback (tries next model if quota exceeded)
+    - Exponential backoff retry (waits longer between each retry)
+    - Clear error messages for every failure type
+
+    Never crashes the pipeline — raises only after all models exhausted.
+    """
+    genai.configure(api_key=GEMINI_API_KEY)
+
+    last_error = None
+
+    for model_name in GEMINI_MODELS:
+        log.info(f"  Trying model: {model_name}")
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                model    = genai.GenerativeModel(model_name)
+                response = model.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        response_mime_type="application/json",
+                        max_output_tokens=1200,
+                        temperature=0.8,
+                    ),
+                )
+                raw  = response.text.strip()
+                raw  = raw.lstrip("```json").lstrip("```").rstrip("```").strip()
+                data = json.loads(raw)
+                log.info(f"  Success with {model_name} (attempt {attempt})")
+                return data
+
+            except Exception as e:
+                err_str = str(e).lower()
+                last_error = e
+
+                # ── Quota / rate limit errors ─────────────────
+                if any(word in err_str for word in [
+                    "quota", "resource_exhausted", "resourceexhausted",
+                    "429", "rate limit", "too many requests"
+                ]):
+                    if attempt < max_retries:
+                        # Exponential backoff: 10s, 20s, 40s
+                        wait = 10 * (2 ** (attempt - 1))
+                        log.warning(
+                            f"  {model_name} quota hit (attempt {attempt}/{max_retries}) "
+                            f"— waiting {wait}s before retry..."
+                        )
+                        time.sleep(wait)
+                    else:
+                        # This model is fully exhausted — try next model
+                        log.warning(
+                            f"  {model_name} quota exhausted after {max_retries} attempts "
+                            f"— switching to next model..."
+                        )
+                        break  # break retry loop, move to next model
+
+                # ── Invalid API key ───────────────────────────
+                elif any(word in err_str for word in [
+                    "api_key", "invalid", "unauthorized", "403", "401"
+                ]):
+                    log.error(
+                        f"  GEMINI_API_KEY is invalid or expired.\n"
+                        f"  Go to aistudio.google.com → Get API Key → update GitHub Secret."
+                    )
+                    raise  # fatal — no point retrying with other models
+
+                # ── Model not found ───────────────────────────
+                elif any(word in err_str for word in ["not found", "404", "model"]):
+                    log.warning(f"  Model {model_name} not available — trying next...")
+                    break  # try next model immediately
+
+                # ── JSON parse error ──────────────────────────
+                elif "json" in err_str or isinstance(e, json.JSONDecodeError):
+                    if attempt < max_retries:
+                        log.warning(f"  JSON parse failed (attempt {attempt}) — retrying...")
+                        time.sleep(3)
+                    else:
+                        log.warning(f"  JSON parse failed after {max_retries} attempts — trying next model...")
+                        break
+
+                # ── Network / timeout ─────────────────────────
+                elif any(word in err_str for word in [
+                    "timeout", "connection", "network", "503", "502"
+                ]):
+                    if attempt < max_retries:
+                        wait = 5 * attempt
+                        log.warning(f"  Network error (attempt {attempt}) — waiting {wait}s...")
+                        time.sleep(wait)
+                    else:
+                        log.warning(f"  Network errors persist — trying next model...")
+                        break
+
+                # ── Unknown error ─────────────────────────────
+                else:
+                    log.warning(f"  Unknown error with {model_name}: {str(e)[:120]}")
+                    if attempt < max_retries:
+                        time.sleep(5)
+                    else:
+                        break
+
+    # All models and retries exhausted
+    raise RuntimeError(
+        f"All Gemini models failed.\n"
+        f"Last error: {last_error}\n\n"
+        f"Possible fixes:\n"
+        f"  1. Wait 24 hours for free quota to reset\n"
+        f"  2. Get a new API key at aistudio.google.com\n"
+        f"  3. Update GEMINI_API_KEY in GitHub Secrets"
+    )
+
 def generate_script() -> dict:
     log.info("Step 1: Generating optimised script + title + thumbnail brief...")
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash")
 
     safe_ch    = _sanitize_for_prompt(CHANNEL_NAME)
     safe_niche = _sanitize_for_prompt(NICHE)
@@ -284,36 +405,45 @@ def generate_script() -> dict:
         '{\n'
         '  "title": "YouTube title following the formula above (50-60 chars)",\n'
         '  "thumbnail_text": "1-3 bold words for thumbnail (max 12 chars total)",\n'
-        '  "thumbnail_emotion": "one word describing emotion: shock|excited|determined|surprised|proud",\n'
+        '  "thumbnail_emotion": "one word: shock|excited|determined|surprised|proud",\n'
         '  "thumbnail_style": "one of: before_after|bold_text|number_stat|transformation|myth_bust",\n'
-        '  "thumbnail_bg_color": "one of: black|dark_red|dark_blue|charcoal — for high contrast",\n'
-        '  "thumbnail_accent": "one of: neon_green|orange|yellow|red — for text and accents",\n'
-        '  "script": "Energetic voiceover 3-5 sentences that DELIVERS the title promise (max 280 chars)",\n'
-        '  "caption": "Platform caption with emojis — references the title promise (max 1800 chars)",\n'
-        '  "hashtags": ["10 hashtags starting with # — mix of broad and niche"],\n'
-        '  "search_keywords": ["3 specific Pexels search terms for the video topic"]\n'
+        '  "thumbnail_bg_color": "one of: black|dark_red|dark_blue|charcoal",\n'
+        '  "thumbnail_accent": "one of: neon_green|orange|yellow|red",\n'
+        '  "script": "Energetic voiceover 3-5 sentences (max 280 chars)",\n'
+        '  "caption": "Platform caption with emojis (max 1800 chars)",\n'
+        '  "hashtags": ["10 hashtags starting with #"],\n'
+        '  "search_keywords": ["3 specific Pexels search terms"]\n'
         '}'
     )
 
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.GenerationConfig(
-            response_mime_type="application/json",
-            max_output_tokens=1200,
-            temperature=0.8,
-        ),
-    )
-    raw  = response.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-    data = json.loads(raw)
+    data = _call_gemini_with_retry(prompt)
 
-    required = ["title","thumbnail_text","thumbnail_emotion","thumbnail_style",
-                "thumbnail_bg_color","thumbnail_accent","script","caption",
-                "hashtags","search_keywords"]
+    # Validate all required fields
+    required = [
+        "title", "thumbnail_text", "thumbnail_emotion", "thumbnail_style",
+        "thumbnail_bg_color", "thumbnail_accent", "script", "caption",
+        "hashtags", "search_keywords"
+    ]
     for field in required:
         if field not in data:
-            raise ValueError(f"Gemini response missing field: {field}")
+            log.warning(f"  Gemini missing field '{field}' — using safe default")
+            # Safe defaults so pipeline never crashes on a missing field
+            defaults = {
+                "title"            : f"7 Fitness Tips That Change Everything",
+                "thumbnail_text"   : "DO THIS",
+                "thumbnail_emotion": "determined",
+                "thumbnail_style"  : "bold_text",
+                "thumbnail_bg_color": "black",
+                "thumbnail_accent" : "neon_green",
+                "script"           : f"Here are the top fitness tips for {safe_niche}. Follow these steps to transform your body. Start today and see results in 30 days.",
+                "caption"          : f"Top fitness tips for {safe_niche} 💪🔥",
+                "hashtags"         : ["#fitness","#workout","#gym","#health","#fit",
+                                      "#training","#motivation","#exercise","#gains","#lifestyle"],
+                "search_keywords"  : ["gym workout", "fitness training", "weight lifting"],
+            }
+            data[field] = defaults[field]
 
-    # Enforce title length — truncate if Gemini ignored the rule
+    # Enforce title length
     data["title"] = data["title"][:60].strip()
 
     log.info(f"  Title     : '{data['title']}'")
