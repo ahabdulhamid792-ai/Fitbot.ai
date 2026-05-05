@@ -739,6 +739,18 @@ def make_vertical(wide, srt_path, script, channel) -> Path:
     fa   = f":fontfile={font}" if font else ""
     has  = srt_path and Path(srt_path).exists()
 
+    # Get source video dimensions to ensure valid crop
+    try:
+        r = subprocess.run(["ffprobe","-v","quiet","-print_format","json",
+                           "-show_streams",str(wide)], capture_output=True, text=True)
+        vid_info = json.loads(r.stdout)["streams"][0]
+        src_w, src_h = vid_info.get("width", YT_W), vid_info.get("height", YT_H)
+    except:
+        src_w, src_h = YT_W, YT_H
+    
+    # Ensure crop box is valid (don't exceed source dimensions)
+    crop_x = max(0, (src_w - VT_W) // 2)
+    
     if has:
         se=str(Path(srt_path).resolve()).replace("\\","/").replace(":","\\:")
         sub=(f"subtitles='{se}':force_style='Fontname=Poppins{fa},FontSize=72,"
@@ -756,7 +768,8 @@ def make_vertical(wide, srt_path, script, channel) -> Path:
                      "fontcolor=white@0.88:fontsize=40:x=30:y=60:borderw=2:bordercolor=black@0.7")
         sub=",".join(filter(None,parts))
 
-    vf=f"crop={VT_W}:{VT_H}:((in_w-{VT_W})/2):0,scale={VT_W}:{VT_H}:flags=lanczos,setsar=1"
+    # Fixed: use calculated crop_x instead of formula, add scale before crop
+    vf=f"scale={VT_W}:{VT_H}:force_original_aspect_ratio=increase,crop={VT_W}:{VT_H}:{crop_x}:0,setsar=1"
     if sub: vf+=","+sub
 
     _ffmpeg(["ffmpeg","-y","-i",str(wide),"-vf",vf,
