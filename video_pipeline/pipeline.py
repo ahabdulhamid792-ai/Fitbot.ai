@@ -739,18 +739,6 @@ def make_vertical(wide, srt_path, script, channel) -> Path:
     fa   = f":fontfile={font}" if font else ""
     has  = srt_path and Path(srt_path).exists()
 
-    # Get source video dimensions to ensure valid crop
-    try:
-        r = subprocess.run(["ffprobe","-v","quiet","-print_format","json",
-                           "-show_streams",str(wide)], capture_output=True, text=True)
-        vid_info = json.loads(r.stdout)["streams"][0]
-        src_w, src_h = vid_info.get("width", YT_W), vid_info.get("height", YT_H)
-    except:
-        src_w, src_h = YT_W, YT_H
-    
-    # Ensure crop box is valid (don't exceed source dimensions)
-    crop_x = max(0, (src_w - VT_W) // 2)
-    
     if has:
         se=str(Path(srt_path).resolve()).replace("\\","/").replace(":","\\:")
         sub=(f"subtitles='{se}':force_style='Fontname=Poppins{fa},FontSize=72,"
@@ -768,9 +756,15 @@ def make_vertical(wide, srt_path, script, channel) -> Path:
                      "fontcolor=white@0.88:fontsize=40:x=30:y=60:borderw=2:bordercolor=black@0.7")
         sub=",".join(filter(None,parts))
 
-    # Fixed: use calculated crop_x instead of formula, add scale before crop
-    vf=f"scale={VT_W}:{VT_H}:force_original_aspect_ratio=increase,crop={VT_W}:{VT_H}:{crop_x}:0,setsar=1"
-    if sub: vf+=","+sub
+    # FIX: scale height to 1920 FIRST, then crop width to 1080
+    # Old wrong approach: crop=1080:1920 from 1920x1080 → crash (height 1920 > source height 1080)
+    # Correct approach: scale so height=1920 first (result ~3413x1920), then crop centre to 1080x1920
+    base_vf = (
+        f"scale=-2:{VT_H},"                          # step 1: scale up so height=1920
+        f"crop={VT_W}:{VT_H}:(iw-{VT_W})/2:0,"      # step 2: crop centre 1080px column
+        f"setsar=1"
+    )
+    vf = base_vf + ("," + sub if sub else "")
 
     _ffmpeg(["ffmpeg","-y","-i",str(wide),"-vf",vf,
              "-c:v","libx264","-profile:v","high","-level","4.2",
@@ -906,8 +900,310 @@ def post_instagram(cdn_url,caption) -> bool:
 
 
 # ════════════════════════════════════════════════════════════════
-# STEP 6 — ATOMIC LOG (crash-safe)
+# THREADS POSTING
+#
+# How Threads API works (Meta Graph API):
+#   Step 1 — Create a media container (POST /{user_id}/threads)
+#            with media_type=VIDEO and a public video URL
+#   Step 2 — Wait for container to process (poll status)
+#   Step 3 — Publish the container (POST /{user_id}/threads_publish)
+#
+# Requirements:
+#   THREADS_USER_ID    — your numeric Threads user ID
+#   THREADS_TOKEN      — long-lived access token (valid 60 days)
+#
+# How to get your Threads credentials:
+#   1. Go to developers.facebook.com → Create App → Threads type
+#   2. Add your account as a test user
+#   3. Generate a long-lived token with these permissions:
+#      threads_basic, threads_content_publish
+#   4. Get your user ID: GET https://graph.threads.net/v1.0/me?access_token=TOKEN
+#   5. Add THREADS_USER_ID and THREADS_TOKEN to GitHub Secrets
+#
+# Important rules from Meta:
+#   - Video URL must be publicly accessible (use Cloudinary CDN URL)
+#   - Max 250 posts per 24 hours
+#   - Token expires every 60 days — refresh before expiry
+#   - Only 1 hashtag per post (pipeline uses the first hashtag only)
+#   - App review needed for production — but works for your own account immediately
 # ════════════════════════════════════════════════════════════════
+THREADS_USER_ID = os.environ.get("THREADS_USER_ID", "")
+THREADS_TOKEN   = os.environ.get("THREADS_TOKEN",   "")
+THREADS_BASE    = "https://graph.threads.net/v1.0"
+
+def post_threads(cdn_url: str, caption: str, hashtags: list) -> bool:
+    """
+    Post a video to Threads using the official Meta Threads API.
+    Uses the two-step container → publish flow.
+    cdn_url must be a public HTTPS URL (Cloudinary vertical video).
+    """
+    if not THREADS_USER_ID or not THREADS_TOKEN:
+        log.warning("Threads: THREADS_USER_ID or THREADS_TOKEN not set — skipping")
+        return False
+    if not cdn_url:
+        log.warning("Threads: no CDN URL available — skipping")
+        return False
+
+    # Threads only allows 1 hashtag — use the first one
+    first_tag  = hashtags[0] if hashtags else "#fitness"
+
+    # Threads caption max 500 chars
+    thread_cap = f"{caption[:460]}\n\n{first_tag}".strip()[:500]
+
+    try:
+        # ── Step 1: Create video container ───────────────────
+        log.info("Threads: creating video container...")
+        r1 = requests.post(
+            f"{THREADS_BASE}/{THREADS_USER_ID}/threads",
+            json={
+                "media_type"  : "VIDEO",
+                "video_url"   : cdn_url,
+                "text"        : thread_cap,
+                "access_token": THREADS_TOKEN,
+            },
+            timeout=30,
+        )
+
+        if not r1.ok:
+            log.error(f"Threads container HTTP {r1.status_code}: {r1.text[:200]}")
+            return False
+
+        container_id = r1.json().get("id")
+        if not container_id:
+            log.error("Threads: no container ID returned")
+            return False
+
+        log.info(f"Threads: container created ({container_id}) — waiting for processing...")
+
+        # ── Step 2: Poll until container is ready ─────────────
+        # Max wait: 18 × 5s = 90 seconds
+        for attempt in range(18):
+            time.sleep(5)
+            try:
+                sr = requests.get(
+                    f"{THREADS_BASE}/{container_id}",
+                    params={
+                        "fields"      : "status,error_message",
+                        "access_token": THREADS_TOKEN,
+                    },
+                    timeout=15,
+                )
+                if sr.ok:
+                    status = sr.json().get("status", "")
+                    if status == "FINISHED":
+                        log.info(f"  Container ready after {(attempt+1)*5}s")
+                        break
+                    if status == "ERROR":
+                        err_msg = sr.json().get("error_message", "unknown error")
+                        log.error(f"Threads: container processing error — {err_msg}")
+                        return False
+                    log.info(f"  Threads container status: {status} (attempt {attempt+1}/18)")
+            except Exception as e:
+                log.warning(f"  Threads poll error: {e}")
+        else:
+            log.error("Threads: container processing timed out after 90s")
+            return False
+
+        # ── Step 3: Publish the container ────────────────────
+        log.info("Threads: publishing...")
+        r2 = requests.post(
+            f"{THREADS_BASE}/{THREADS_USER_ID}/threads_publish",
+            json={
+                "creation_id" : container_id,
+                "access_token": THREADS_TOKEN,
+            },
+            timeout=30,
+        )
+
+        if r2.ok and r2.json().get("id"):
+            thread_id = r2.json().get("id")
+            log.info(f"Threads ✓  id={thread_id}")
+            return True
+
+        log.error(f"Threads publish HTTP {r2.status_code}: {r2.text[:200]}")
+        return False
+
+    except requests.exceptions.Timeout:
+        log.error("Threads: request timed out")
+        return False
+    except Exception as e:
+        log.error(f"Threads: {str(e)[:200]}")
+        return False
+
+
+# ════════════════════════════════════════════════════════════════
+# BUFFER API  (GraphQL — posts to TikTok, Instagram, Threads)
+#
+# How it works:
+#   1. Buffer connects your social channels (TikTok, Instagram, Threads)
+#   2. Pipeline sends video + caption to Buffer via GraphQL API
+#   3. Buffer schedules and posts to all connected channels
+#
+# Setup:
+#   1. Go to buffer.com → connect TikTok, Instagram, Threads
+#   2. Go to publish.buffer.com/settings/api → copy API key
+#   3. Add to GitHub Secrets:
+#        BUFFER_API_KEY      = your Buffer API key
+#        BUFFER_ORG_ID       = your organization ID (auto-fetched if not set)
+#
+# How to get BUFFER_ORG_ID:
+#   Run this once:
+#   curl -X POST https://api.buffer.com \
+#     -H "Authorization: Bearer YOUR_API_KEY" \
+#     -H "Content-Type: application/json" \
+#     -d '{"query":"query{account{currentOrganization{id name}}}"}'
+#   Copy the id value → paste as BUFFER_ORG_ID
+#
+# Free plan: 3 channels, 10 scheduled posts at a time
+# ════════════════════════════════════════════════════════════════
+BUFFER_API_KEY = os.environ.get("BUFFER_API_KEY", "")
+BUFFER_ORG_ID  = os.environ.get("BUFFER_ORG_ID",  "")
+BUFFER_URL     = "https://api.buffer.com"
+
+def _buffer_graphql(query: str, variables: dict = None) -> dict:
+    """Execute a Buffer GraphQL query or mutation."""
+    payload = {"query": query}
+    if variables:
+        payload["variables"] = variables
+    try:
+        r = requests.post(
+            BUFFER_URL,
+            headers={
+                "Authorization": f"Bearer {BUFFER_API_KEY}",
+                "Content-Type" : "application/json",
+            },
+            json=payload,
+            timeout=30,
+        )
+        if not r.ok:
+            log.error(f"  Buffer HTTP {r.status_code}: {r.text[:200]}")
+            return {}
+        data = r.json()
+        if "errors" in data:
+            log.error(f"  Buffer GraphQL error: {data['errors']}")
+            return {}
+        return data.get("data", {})
+    except Exception as e:
+        log.error(f"  Buffer request failed: {str(e)[:150]}")
+        return {}
+
+def _buffer_get_org_id() -> str:
+    """Auto-fetch organization ID if not set in secrets."""
+    if BUFFER_ORG_ID:
+        return BUFFER_ORG_ID
+    log.info("  Buffer: fetching organization ID...")
+    data = _buffer_graphql("query { account { currentOrganization { id name } } }")
+    org_id = data.get("account", {}).get("currentOrganization", {}).get("id", "")
+    if org_id:
+        log.info(f"  Buffer org ID: {org_id}")
+    else:
+        log.error("  Buffer: could not fetch org ID — set BUFFER_ORG_ID in secrets")
+    return org_id
+
+def _buffer_get_channels(org_id: str) -> list:
+    """Fetch all connected Buffer channels."""
+    data = _buffer_graphql(
+        """
+        query GetChannels($orgId: String!) {
+          channels(input: { organizationId: $orgId }) {
+            id
+            name
+            displayName
+            service
+          }
+        }
+        """,
+        {"orgId": org_id},
+    )
+    channels = data.get("channels", [])
+    log.info(f"  Buffer channels found: {[c.get('service','?') for c in channels]}")
+    return channels
+
+def post_buffer(cdn_url: str, caption: str, hashtags: list) -> bool:
+    """
+    Post vertical video to ALL channels connected in Buffer.
+    This handles TikTok, Instagram, and Threads through one API call.
+    cdn_url must be a public HTTPS URL (Cloudinary vertical video).
+    """
+    if not BUFFER_API_KEY:
+        log.warning("Buffer: BUFFER_API_KEY not set — skipping")
+        log.warning("  Get free key: publish.buffer.com/settings/api")
+        return False
+    if not cdn_url:
+        log.warning("Buffer: no CDN URL — skipping")
+        return False
+
+    # Build caption with hashtags — max 2200 chars
+    full_caption = f"{caption}\n\n{' '.join(hashtags[:10])}".strip()[:2200]
+
+    # Get org ID
+    org_id = _buffer_get_org_id()
+    if not org_id:
+        return False
+
+    # Get all connected channels
+    channels = _buffer_get_channels(org_id)
+    if not channels:
+        log.error("Buffer: no channels found — connect TikTok/Instagram/Threads in buffer.com")
+        return False
+
+    # Post to every connected channel
+    success_count = 0
+    mutation = """
+        mutation CreatePost($input: CreatePostInput!) {
+          createPost(input: $input) {
+            ... on PostActionSuccess {
+              post {
+                id
+                text
+              }
+            }
+            ... on MutationError {
+              message
+            }
+          }
+        }
+    """
+
+    for channel in channels:
+        channel_id      = channel.get("id", "")
+        channel_service = channel.get("service", "unknown")
+        channel_name    = channel.get("displayName") or channel.get("name", "")
+
+        if not channel_id:
+            continue
+
+        log.info(f"  Buffer: posting to {channel_service} ({channel_name})...")
+
+        variables = {
+            "input": {
+                "text"          : full_caption,
+                "channelId"     : channel_id,
+                "schedulingType": "automatic",
+                "mode"          : "addToQueue",
+                "assets"        : [{"video": {"url": cdn_url}}],
+            }
+        }
+
+        data = _buffer_graphql(mutation, variables)
+        post = data.get("createPost", {})
+
+        if post.get("post", {}).get("id"):
+            log.info(f"  Buffer {channel_service} ✓  id={post['post']['id']}")
+            success_count += 1
+        elif post.get("message"):
+            log.error(f"  Buffer {channel_service} error: {post['message']}")
+        else:
+            log.error(f"  Buffer {channel_service}: unexpected response")
+
+        time.sleep(1)  # be polite between posts
+
+    if success_count > 0:
+        log.info(f"Buffer ✓  {success_count}/{len(channels)} channels posted")
+        return True
+
+    log.error("Buffer: failed to post to any channel")
+    return False
 def save_run_log(script_data,results):
     lp=Path(__file__).parent/"run_history.json"
     try: existing=json.loads(lp.read_text(encoding="utf-8")) if lp.exists() else []
@@ -941,70 +1237,123 @@ def _validate_env():
 # ════════════════════════════════════════════════════════════════
 def main():
     log.info("=" * 68)
-    log.info("FitBot v6 GOD MODE — Multi-Provider AI · Zero Cost · Zero Crashes")
+    log.info("FitBot v7 GOD MODE — Buffer + Threads + Full Security")
     log.info(f"Channel  : {CHANNEL_NAME}")
     log.info(f"Niche    : {NICHE}")
-    log.info(f"AI Chain : Cerebras → Groq → OpenRouter → Gemini → Script Cache")
-    log.info(f"Wide     : {YT_W}×{YT_H} → YouTube + Facebook")
-    log.info(f"Vertical : {VT_W}×{VT_H} → TikTok  + Instagram")
-    log.info(f"Quality  : H.264 High · 12Mbps · 192k AAC · bt709 · Poppins Bold")
+    log.info(f"AI Chain : Cerebras → Groq → OpenRouter → Gemini → Cache")
+    log.info(f"Wide     : {YT_W}×{YT_H}  → YouTube (direct) + Facebook (direct)")
+    log.info(f"Vertical : {VT_W}×{VT_H}  → Buffer  (TikTok + Instagram + Threads)")
+    log.info(f"Quality  : H.264 High · 12Mbps · 192k AAC · bt709")
     log.info(f"Cost     : $0.00/month")
     log.info("=" * 68)
 
     _validate_env()
 
-    wide=vertical=thumbnail=None
+    wide = vertical = thumbnail = None
     try:
-        # Step 1 — Script
+        # ── Step 1: Script + title + thumbnail brief ──────────
         script_data = generate_script()
         cap  = _caption(script_data["caption"], script_data["hashtags"])
         desc = script_data["caption"] + "\n\n" + " ".join(script_data["hashtags"])
 
-        # Step 1b — Thumbnail
+        # ── Step 1b: Branded thumbnail (1280×720 PNG) ─────────
         thumbnail = generate_thumbnail(script_data, CHANNEL_NAME)
 
-        # Step 2 — Pexels
+        # ── Step 2: Pexels landscape clips ────────────────────
         clips = fetch_pexels_videos(script_data["search_keywords"], VIDEO_DURATION)
 
-        # Step 3 — Voiceover + SRT
+        # ── Step 3: Voiceover + synced SRT captions ───────────
         voiceover, srt = generate_voiceover_with_subs(script_data["script"])
 
-        # Step 4a — Widescreen
-        wide = assemble_video(clips, voiceover, srt,
-                              title=script_data["title"],
-                              script=script_data["script"],
-                              channel=CHANNEL_NAME)
+        # ── Step 4a: Widescreen master 1920×1080 ──────────────
+        wide = assemble_video(
+            clips, voiceover, srt,
+            title   = script_data["title"],
+            script  = script_data["script"],
+            channel = CHANNEL_NAME,
+        )
 
-        # Step 4b — Vertical
-        vertical = make_vertical(wide, srt,
-                                 script=script_data["script"],
-                                 channel=CHANNEL_NAME)
+        # ── Step 4b: Vertical cut 1080×1920 ───────────────────
+        vertical = make_vertical(
+            wide, srt,
+            script  = script_data["script"],
+            channel = CHANNEL_NAME,
+        )
 
-        # Step 4c — CDN
+        # ── Step 4c: Upload vertical to Cloudinary CDN ────────
+        # Required for Buffer, TikTok direct, Instagram direct
         cdn_url = upload_to_cloudinary(vertical, "fitbot_vertical_latest")
 
-        # Step 5 — Post
+        # ── Step 5: Post to all platforms ─────────────────────
         log.info("Step 5: Posting to all platforms...")
-        yt_id = post_youtube(wide, script_data["title"], desc, thumbnail=thumbnail)
+        log.info("  Direct  : YouTube (1920×1080) + Facebook (1920×1080)")
+        log.info("  Buffer  : TikTok + Instagram + Threads (1080×1920 via CDN)")
+
+        # YouTube — direct file upload + custom thumbnail
+        yt_id = post_youtube(
+            wide, script_data["title"], desc,
+            thumbnail = thumbnail,
+        )
+
+        # Facebook — direct file upload
+        fb_ok = post_facebook(wide, script_data["title"], desc)
+
+        # Buffer — posts to ALL connected channels
+        # (TikTok, Instagram, Threads all handled by Buffer in one call)
+        buf_ok = post_buffer(cdn_url, cap, script_data["hashtags"])
+
+        # Direct Threads fallback — only runs if Buffer is not configured
+        # but THREADS_USER_ID and THREADS_TOKEN are set
+        threads_ok = False
+        if not buf_ok and THREADS_USER_ID and THREADS_TOKEN:
+            log.info("  Buffer not configured — trying Threads direct API...")
+            threads_ok = post_threads(cdn_url, cap, script_data["hashtags"])
+
+        # Direct TikTok fallback — only if Buffer not configured
+        tiktok_ok = False
+        if not buf_ok and TIKTOK_TOKEN:
+            log.info("  Buffer not configured — trying TikTok direct API...")
+            tiktok_ok = post_tiktok(cdn_url, cap)
+
+        # Direct Instagram fallback — only if Buffer not configured
+        ig_ok = False
+        if not buf_ok and IG_ACCOUNT_ID and IG_TOKEN:
+            log.info("  Buffer not configured — trying Instagram direct API...")
+            ig_ok = post_instagram(cdn_url, cap)
+
         results = {
             "youtube"  : bool(yt_id),
-            "facebook" : post_facebook(wide, script_data["title"], desc),
-            "tiktok"   : post_tiktok(cdn_url, cap),
-            "instagram": post_instagram(cdn_url, cap),
+            "facebook" : fb_ok,
+            "buffer"   : buf_ok,      # covers TikTok + Instagram + Threads
+            "threads"  : threads_ok,  # direct fallback
+            "tiktok"   : tiktok_ok,   # direct fallback
+            "instagram": ig_ok,       # direct fallback
         }
 
+        # ── Results summary ───────────────────────────────────
         log.info("=" * 68)
         log.info("RESULTS:")
-        fmts={"youtube":"1920×1080","facebook":"1920×1080","tiktok":"1080×1920","instagram":"1080×1920"}
-        for p,ok in results.items():
-            log.info(f"  {p.upper():12}  {'✓ POSTED' if ok else '✗ skipped/failed'}  [{fmts[p]}]")
-        if yt_id: log.info(f"  Watch: https://youtube.com/watch?v={yt_id}")
+        display = {
+            "youtube"  : "1920×1080  direct upload",
+            "facebook" : "1920×1080  direct upload",
+            "buffer"   : "1080×1920  TikTok+Instagram+Threads via Buffer",
+            "threads"  : "1080×1920  direct API (Buffer fallback)",
+            "tiktok"   : "1080×1920  direct API (Buffer fallback)",
+            "instagram": "1080×1920  direct API (Buffer fallback)",
+        }
+        for p, ok in results.items():
+            if ok or p in ("youtube","facebook","buffer"):
+                status = "✓ POSTED" if ok else "✗ skipped/failed"
+                log.info(f"  {p.upper():12}  {status}  [{display[p]}]")
+        if yt_id:
+            log.info(f"  YouTube URL: https://youtube.com/watch?v={yt_id}")
         log.info("=" * 68)
 
-        # Step 6 — Log
+        # ── Step 6: Save run log (atomic write) ───────────────
         save_run_log(script_data, results)
 
     finally:
+        # Clean up temp files — keep final outputs for artifact upload
         cleanup(keep_list=[wide, vertical, thumbnail])
         log.info("Pipeline complete.")
 
