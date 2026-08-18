@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/fitbot-ai/backend/server.js << 'EOF'
 'use strict';
 // ════════════════════════════════════════════════════════════════
 // FITBOT BACKEND — v3
@@ -458,5 +457,3 @@ server.listen(PORT, () => {
   log(`AI fallback 2   : ${AI.openrouter.key ? 'OpenRouter 200 req/day ✓' : 'Not configured'}`);
   log(`AI fallback 3   : ${process.env.GEMINI_API_KEY ? 'Gemini 1,500 req/day ✓' : 'Not configured'}`);
 });
-EOF
-echo "done"
