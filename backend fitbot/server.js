@@ -316,7 +316,7 @@ const server = http.createServer(async (req, res) => {
   // Serve frontend
   if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
     try {
-      const html = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf8');
+      const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
       sendHTML(res, 200, html);
     } catch { sendJSON(res, 500, { error: 'Could not serve app' }); }
     return;
