@@ -1,1071 +1,531 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<!-- CSP: only allow calls to own server (self). Claude API is proxied through backend. -->
-<meta http-equiv="Content-Security-Policy" content="
-  default-src 'none';
-  script-src 'unsafe-inline';
-  style-src 'unsafe-inline' https://fonts.googleapis.com;
-  font-src https://fonts.gstatic.com;
-  connect-src 'self';
-  img-src 'self' data:;
-  frame-ancestors 'none';
-  form-action 'none';
-"/>
-<!-- BUG 10 FIX: CSRF token is injected here by the server at render time -->
-<!-- Server replaces %%CSRF_TOKEN%% with a real per-session token -->
-<meta name="csrf-token" content="%%CSRF_TOKEN%%"/>
-<title>FitBot — Personal Fitness Content Studio</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet"/>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#05050a;--bg2:#0c0c14;--bg3:#12121e;--bg4:#1a1a28;
-  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
-  --text:#eeeaf8;--muted:rgba(238,234,248,0.45);--dim:rgba(238,234,248,0.2);
-  --green:#00ff88;--green2:rgba(0,255,136,0.12);--green3:rgba(0,255,136,0.06);
-  --orange:#ff7c2a;--orange2:rgba(255,124,42,0.12);
-  --red:#ff4d6d;--red2:rgba(255,77,109,0.12);
-  --font:'DM Sans',sans-serif;--mono:'JetBrains Mono',monospace;--display:'Bebas Neue',sans-serif;
-  --r:10px;--r2:16px;
-}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}
-#loginPage{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center}
-.login-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:2rem;width:340px;text-align:center}
-.login-title{font-family:var(--display);font-size:28px;letter-spacing:0.04em;margin-bottom:0.5rem}
-.login-sub{font-size:12px;color:var(--muted);margin-bottom:1.5rem}
-.login-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.75rem 1rem;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;margin-bottom:0.75rem}
-.login-input:focus{border-color:var(--border2)}
-.login-btn{width:100%;background:var(--green);color:#05050a;border:none;padding:0.75rem;border-radius:var(--r);font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:opacity 0.2s}
-.login-btn:hover{opacity:0.85}
-.login-btn:disabled{opacity:0.3;cursor:not-allowed}
-.login-error{font-size:11px;color:var(--red);margin-top:0.75rem;min-height:16px}
-.login-note{font-size:10px;color:var(--muted);margin-top:1rem;line-height:1.5;text-align:left;background:var(--bg3);padding:0.75rem;border-radius:var(--r)}
-.shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
-.sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
-.logo{padding:1.5rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.logo-icon{width:32px;height:32px;background:var(--green);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px}
-.logo-text{font-family:var(--display);font-size:18px;letter-spacing:0.04em}
-.nav{padding:1rem 0;flex:1}
-.nav-section{font-family:var(--mono);font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:var(--dim);padding:0.75rem 1.25rem 0.4rem}
-.nav-item{display:flex;align-items:center;gap:10px;padding:0.6rem 1.25rem;cursor:pointer;transition:all 0.15s;color:var(--muted);border-left:2px solid transparent;font-size:12px}
-.nav-item:hover{background:var(--bg3);color:var(--text)}
-.nav-item.active{background:var(--green3);color:var(--green);border-left-color:var(--green)}
-.nav-icon{font-size:14px;width:16px;flex-shrink:0}
-.sidebar-footer{padding:1rem 1.25rem;border-top:1px solid var(--border);color:var(--muted);font-size:10px;font-family:var(--mono)}
-.sidebar-logout{background:none;border:none;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;padding:0.75rem 0;margin-top:0.75rem;transition:color 0.2s;width:100%;text-align:left;display:block}
-.sidebar-logout:hover{color:var(--red)}
-.main{display:flex;flex-direction:column}
-.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:1.5rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
-.topbar-title{font-family:var(--display);font-size:22px;letter-spacing:0.04em}
-.topbar-subtitle{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase}
-.content{padding:2rem;flex:1;overflow-y:auto}
-.page{display:none}.page.active{display:block}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem;margin-bottom:1.5rem}
-.card-label{font-family:var(--mono);font-size:8px;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted);margin-bottom:0.75rem}
-.card-title{font-size:16px;font-weight:500;margin-bottom:0.5rem}
-.card-desc{font-size:12px;color:var(--muted);line-height:1.5}
-.input-group{margin-bottom:1rem}
-.lbl{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:0.5rem;display:block}
-.inp{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.7rem 0.9rem;color:var(--text);font-family:var(--font);font-size:12px;outline:none;transition:border-color 0.2s}
-.inp:focus{border-color:var(--border2)}
-textarea.inp{resize:vertical;min-height:70px;font-family:var(--font)}
-.btn{background:var(--green);color:#05050a;border:none;padding:0.7rem 1.3rem;border-radius:var(--r);font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;font-weight:500;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;margin-right:8px}
-.btn:hover{opacity:0.88;transform:translateY(-1px)}
-.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
-.trend-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:1rem}
-.trend-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:1rem;cursor:pointer;transition:all 0.2s}
-.trend-card:hover{border-color:var(--border2);background:var(--bg4)}
-.trend-name{font-weight:500;font-size:13px;margin-bottom:0.4rem;line-height:1.3}
-.trend-src{font-size:11px;color:var(--muted)}
-.script-block{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:1rem;font-size:12px;line-height:1.5;min-height:50px;border-left:3px solid var(--green);margin-bottom:0.75rem}
-.queue-list{display:flex;flex-direction:column;gap:8px;margin-top:1rem}
-.queue-item{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.9rem;display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;font-size:12px}
-.queue-platform{font-size:18px}
-.queue-title{font-weight:500}
-.queue-meta{font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
-.queue-status{font-family:var(--mono);font-size:8px;padding:2px 8px;border-radius:20px;background:var(--green2);color:var(--green);text-transform:uppercase}
-.queue-delete{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:2px;transition:color 0.2s}
-.queue-delete:hover{color:var(--red)}
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
-.metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:0.9rem;text-align:center}
-.metric-num{font-family:var(--display);font-size:28px;line-height:1;color:var(--green);margin-bottom:0.4rem}
-.metric-label{font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)}
-.banner{background:rgba(255,124,42,0.1);border:1px solid rgba(255,124,42,0.3);border-radius:var(--r);padding:0.9rem;margin-bottom:1.5rem;font-size:11px;color:var(--orange);line-height:1.5}
-.logbox{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:0.75rem;font-family:var(--mono);font-size:9px;max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
-.log-line{display:flex;gap:6px;line-height:1.4}
-.log-time{color:var(--dim);flex-shrink:0}
-.log-success{color:var(--green)}.log-info{color:var(--muted)}.log-error{color:var(--red)}.log-warn{color:var(--orange)}
-.empty{text-align:center;padding:1.5rem;color:var(--dim);font-size:12px}
-.empty-icon{font-size:32px;margin-bottom:0.5rem;opacity:0.4}
-::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-</style>
-</head>
-<body>
-
-<!-- LOGIN PAGE -->
-<div id="loginPage">
-  <div class="login-box">
-    <div class="login-title">FitBot</div>
-    <div class="login-sub">Private Content Studio</div>
-    <!--
-      BUG 4 NOTE: password is sent to backend over HTTPS, hashed server-side with bcrypt.
-      Never hash client-side — client-side hash just becomes the new plaintext password.
-      Correct pattern: send plaintext over HTTPS → bcrypt compare on server.
-    -->
-    <input type="email"    class="login-input" id="loginEmail"    placeholder="Email"    autocomplete="email"            onkeydown="if(event.key==='Enter')login()"/>
-    <input type="password" class="login-input" id="loginPassword" placeholder="Password" autocomplete="current-password" spellcheck="false" onkeydown="if(event.key==='Enter')login()"/>
-    <button class="login-btn" id="loginBtn" onclick="login()">Login</button>
-    <!-- BUG 3 FIX: error display uses a dedicated DOM element set via textContent -->
-    <div class="login-error" id="loginError"></div>
-    <div class="login-note">🔒 Secure server authentication. No API keys stored in browser.</div>
-  </div>
-</div>
-
-<!-- MAIN APP (hidden until login) -->
-<div class="shell" id="appShell" style="display:none">
-
-  <aside class="sidebar">
-    <div class="logo">
-      <div class="logo-icon">🔥</div>
-      <div class="logo-text">FitBot</div>
-    </div>
-    <nav class="nav">
-      <div class="nav-section">Studio</div>
-      <!-- BUG 7 FIX: nav items have data-page attributes, no fragile innerHTML selectors -->
-      <div class="nav-item active" data-page="research" onclick="showPage('research',this)"><span class="nav-icon">📊</span> Trends</div>
-      <div class="nav-item"        data-page="scripts"  onclick="showPage('scripts',this)"><span class="nav-icon">✍️</span>  Scripts</div>
-      <div class="nav-item"        data-page="video"    onclick="showPage('video',this)"><span class="nav-icon">🎬</span>  Video</div>
-      <div class="nav-item"        data-page="queue"    onclick="showPage('queue',this)"><span class="nav-icon">📅</span>  Queue</div>
-      <div class="nav-section">Config</div>
-      <div class="nav-item"        data-page="settings" onclick="showPage('settings',this)"><span class="nav-icon">⚙️</span>  Settings</div>
-    </nav>
-    <div class="sidebar-footer">
-      💪 Mhed Fitness
-      <button class="sidebar-logout" onclick="logout()">⬅ Logout</button>
-    </div>
-  </aside>
-
-  <div class="main">
-    <div class="topbar">
-      <div>
-        <div class="topbar-title" id="pageTitle">Trends</div>
-        <div class="topbar-subtitle" id="pageSub">Personal research studio</div>
-      </div>
-      <!-- BUG 3 FIX: user email set via textContent, never innerHTML -->
-      <span id="userDisplay" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></span>
-    </div>
-
-    <div class="content">
-
-      <!-- TRENDS PAGE -->
-      <div class="page active" id="page-research">
-        <div class="banner">📊 Add fitness trends you find on YouTube, TikTok Creative Center, Google Trends, or Social Blade. No API keys needed here.</div>
-        <div class="metrics">
-          <div class="metric"><div class="metric-num" id="m-trends">0</div><div class="metric-label">Trends</div></div>
-          <div class="metric"><div class="metric-num" id="m-scripts">0</div><div class="metric-label">Scripts</div></div>
-          <div class="metric"><div class="metric-num" id="m-queue">0</div><div class="metric-label">Queued</div></div>
-          <div class="metric"><div class="metric-num" id="m-posted">0</div><div class="metric-label">Posted</div></div>
-        </div>
-
-        <div class="card">
-          <div class="card-label">Add Trend</div>
-          <div class="input-group">
-            <label class="lbl" for="trendTopic">Trend Topic</label>
-            <input type="text" class="inp" id="trendTopic" placeholder="e.g., HIIT workouts" maxlength="80" autocomplete="off"/>
-          </div>
-          <div class="input-group">
-            <label class="lbl" for="trendSource">Source</label>
-            <select class="inp" id="trendSource">
-              <option value="">Select source</option>
-              <option value="YouTube">YouTube Trending</option>
-              <option value="TikTok">TikTok Creative Center</option>
-              <option value="Google Trends">Google Trends</option>
-              <option value="Social Blade">Social Blade</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <label class="lbl" for="trendNotes">Notes</label>
-            <textarea class="inp" id="trendNotes" placeholder="Why is it trending?" maxlength="200"></textarea>
-          </div>
-          <button class="btn" onclick="addTrend()">+ Add Trend</button>
-        </div>
-
-        <div class="card">
-          <div class="card-label">Your Trends</div>
-          <div id="trendsContainer"><div class="empty"><div class="empty-icon">📊</div>No trends yet</div></div>
-        </div>
-      </div>
-
-      <!-- SCRIPTS PAGE -->
-      <div class="page" id="page-scripts">
-        <div class="banner">✍️ Pick a trend and Claude writes an original script — API key stays on the server.</div>
-        <div class="card">
-          <div class="card-label">Generate Script</div>
-          <div class="input-group">
-            <label class="lbl" for="trendSelect">Select Trend</label>
-            <select class="inp" id="trendSelect"></select>
-          </div>
-          <button class="btn" id="genBtn" onclick="generateScript()">Generate Script</button>
-        </div>
-
-        <div class="card" id="scriptOutput" style="display:none">
-          <div class="card-label">Generated Script</div>
-          <div class="input-group"><label class="lbl">Hook</label><div class="script-block" id="scriptHook"></div></div>
-          <div class="input-group"><label class="lbl">Body</label><div class="script-block" id="scriptBody"></div></div>
-          <div class="input-group"><label class="lbl">CTA</label><div class="script-block" id="scriptCTA"></div></div>
-          <div class="input-group">
-            <label class="lbl">Caption (editable)</label>
-            <textarea class="inp" id="scriptCaption" style="max-height:100px"></textarea>
-          </div>
-          <div class="input-group">
-            <label class="lbl">Video Prompt (for AI video)</label>
-            <textarea class="inp" id="scriptVideoPrompt" style="max-height:60px" placeholder="AI-generated scene description…"></textarea>
-          </div>
-          <button class="btn" onclick="queueScript()">📅 Queue</button>
-          <button class="btn" style="background:var(--bg3);color:var(--text)" onclick="generateScript()">🔄 Regenerate</button>
-          <button class="btn" style="background:var(--bg4);color:var(--green);border:1px solid var(--green)" id="makeVideoBtn" onclick="goMakeVideo()">🎬 Make Video</button>
-        </div>
-
-        <div class="logbox" id="scriptLog"></div>
-      </div>
-
-      <!-- VIDEO PAGE -->
-      <div class="page" id="page-video">
-        <div class="banner" id="videoBanner">🎬 Generate a short fitness video using WaveSpeed AI (LTX-2.3 — produces video + audio from text). Requires WAVESPEED_API_KEY in .env ($1 free credit at wavespeed.ai, no card to sign up).</div>
-        <div class="card">
-          <div class="card-label">Video Generation</div>
-          <div class="input-group">
-            <label class="lbl">Visual Prompt</label>
-            <textarea class="inp" id="videoPromptInput" rows="3" placeholder="e.g. A person doing HIIT workout in a bright gym, fast movements, motivational lighting…" maxlength="300"></textarea>
-            <div style="font-size:10px;color:var(--muted);margin-top:4px">This is the scene description. Be specific about movement, setting, and lighting.</div>
-          </div>
-          <button class="btn" id="genVideoBtn" onclick="generateVideo()">🎬 Generate Video</button>
-          <div style="margin-top:1rem;font-size:11px;color:var(--muted)">Duration: 5 seconds · Format: 9:16 vertical (TikTok/Reels) · Quality: 720p</div>
-        </div>
-
-        <div class="card" id="videoOutput" style="display:none">
-          <div class="card-label">Generated Video</div>
-          <video id="videoPlayer" controls style="width:100%;max-width:360px;border-radius:var(--r);display:block;margin-bottom:1rem" playsinline></video>
-          <a id="videoDownload" class="btn" download="fitbot-video.mp4">⬇ Download MP4</a>
-          <button class="btn" style="background:var(--bg3);color:var(--text)" onclick="generateVideo()">🔄 Regenerate</button>
-        </div>
-
-        <div class="card" id="videoHistory">
-          <div class="card-label">Recent Videos</div>
-          <div id="videoList"><div class="empty"><div class="empty-icon">🎬</div>No videos yet</div></div>
-        </div>
-
-        <div class="logbox" id="videoLog"></div>
-      </div>
-
-      <!-- QUEUE PAGE -->
-      <div class="page" id="page-queue">
-        <div class="banner">📅 Posts scheduled across TikTok, Instagram, YouTube, Facebook.</div>
-        <div class="card">
-          <div class="card-label">Post Queue</div>
-          <div id="queueContainer"><div class="empty"><div class="empty-icon">📅</div>No posts queued</div></div>
-        </div>
-      </div>
-
-      <!-- SETTINGS PAGE -->
-      <div class="page" id="page-settings">
-        <div class="banner" style="background:var(--green3);border-color:rgba(0,255,136,0.2);color:var(--green)">
-          ⚙️ All keys are sent to the server and saved as environment variables. They never appear in the browser after saving. Restart the server after saving new keys.
-        </div>
-
-        <!-- AI PROVIDERS -->
-        <div class="card">
-          <div class="card-label">🤖 AI Providers — Script Generation</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:1rem;line-height:1.6">
-            Priority order: <span style="color:var(--green)">Cerebras</span> → Groq → OpenRouter → Gemini → Script Cache.<br/>
-            Add at least one. Cerebras is the best — 1,000,000 tokens/day free, email only signup.
-          </div>
-
-          <div class="sk-group">
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Cerebras <span class="sk-tag sk-best">BEST — 1M tokens/day</span></div>
-                <div class="sk-src">cloud.cerebras.ai → Sign up → API Keys → Create Key</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-cerebras" placeholder="cs-xxxxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('CEREBRAS_API_KEY','key-cerebras','st-cerebras')">Save</button>
-                <button class="sk-test" onclick="testApiKey('cerebras','st-cerebras')">Test</button>
-              </div>
-              <div class="sk-status" id="st-cerebras"></div>
-            </div>
-
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Groq <span class="sk-tag sk-free">14,400 req/day</span></div>
-                <div class="sk-src">console.groq.com → API Keys → Create API Key</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-groq" placeholder="gsk_xxxxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('GROQ_API_KEY','key-groq','st-groq')">Save</button>
-                <button class="sk-test" onclick="testApiKey('groq','st-groq')">Test</button>
-              </div>
-              <div class="sk-status" id="st-groq"></div>
-            </div>
-
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">OpenRouter <span class="sk-tag sk-free">200 req/day free</span></div>
-                <div class="sk-src">openrouter.ai → Sign in with Google → Keys → Create Key</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-openrouter" placeholder="sk-or-xxxxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('OPENROUTER_API_KEY','key-openrouter','st-openrouter')">Save</button>
-                <button class="sk-test" onclick="testApiKey('openrouter','st-openrouter')">Test</button>
-              </div>
-              <div class="sk-status" id="st-openrouter"></div>
-            </div>
-
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Gemini <span class="sk-tag sk-fallback">Fallback — 1,500/day</span></div>
-                <div class="sk-src">aistudio.google.com → Get API Key → Create API Key in new project</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-gemini" placeholder="AIzaSyXxxxxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('GEMINI_API_KEY','key-gemini','st-gemini')">Save</button>
-                <button class="sk-test" onclick="testApiKey('gemini','st-gemini')">Test</button>
-              </div>
-              <div class="sk-status" id="st-gemini"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- VIDEO & CDN -->
-        <div class="card">
-          <div class="card-label">📹 Video & CDN</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:1rem;line-height:1.6">
-            Video method: <span style="color:var(--green)">Pexels stock clips + ffmpeg assembly</span> — 100% free, unlimited.<br/>
-            The pipeline downloads HD/4K fitness footage, adds your voiceover, and assembles into 1920×1080 + 1080×1920 MP4.
-          </div>
-
-          <div class="sk-group">
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Pexels API Key <span class="sk-tag sk-required">Required</span></div>
-                <div class="sk-src">pexels.com/api → Your API Key (free, 20,000 req/month)</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-pexels" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('PEXELS_API_KEY','key-pexels','st-pexels')">Save</button>
-                <button class="sk-test" onclick="testApiKey('pexels','st-pexels')">Test</button>
-              </div>
-              <div class="sk-status" id="st-pexels"></div>
-            </div>
-
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Cloudinary URL <span class="sk-tag sk-required">Required for TikTok/Instagram</span></div>
-                <div class="sk-src">cloudinary.com → Dashboard → copy API Environment variable (after CLOUDINARY_URL=)</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-cloudinary" placeholder="cloudinary://API_KEY:API_SECRET@CLOUD_NAME" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('CLOUDINARY_URL','key-cloudinary','st-cloudinary')">Save</button>
-                <button class="sk-test" onclick="testApiKey('cloudinary','st-cloudinary')">Test</button>
-              </div>
-              <div class="sk-status" id="st-cloudinary"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- BUFFER CONNECTION -->
-        <div class="card">
-          <div class="card-label">📱 Buffer — TikTok + Instagram + Threads</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:1rem;line-height:1.6">
-            Buffer posts your vertical video (1080×1920) to all connected social channels automatically.<br/>
-            Connect TikTok, Instagram, and Threads inside Buffer first, then add your API key here.
-          </div>
-
-          <div class="sk-group">
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Buffer API Key <span class="sk-tag sk-best">Posts TikTok + Instagram + Threads</span></div>
-                <div class="sk-src">publish.buffer.com → Settings → API → Create Token</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-buffer" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('BUFFER_API_KEY','key-buffer','st-buffer')">Save</button>
-                <button class="sk-test" onclick="testApiKey('buffer','st-buffer')">Test Connection</button>
-              </div>
-              <div class="sk-status" id="st-buffer"></div>
-            </div>
-          </div>
-
-          <div style="margin-top:1rem;padding:0.9rem;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)">
-            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">How to connect Buffer</div>
-            <div style="font-size:11px;color:var(--muted);line-height:1.8">
-              1. Go to <span style="color:var(--green)">buffer.com</span> → Create free account<br/>
-              2. Click <strong style="color:var(--text)">Add Channel</strong> → Connect TikTok → log in<br/>
-              3. Click <strong style="color:var(--text)">Add Channel</strong> → Connect Instagram → log in<br/>
-              4. Click <strong style="color:var(--text)">Add Channel</strong> → Connect Threads → log in<br/>
-              5. Go to <span style="color:var(--green)">publish.buffer.com/settings/api</span> → Create Token<br/>
-              6. Paste the token above → Save
-            </div>
-          </div>
-        </div>
-
-        <!-- YOUTUBE -->
-        <div class="card">
-          <div class="card-label">▶️ YouTube — Direct Upload</div>
-          <div class="sk-group">
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Client ID</div>
-                <div class="sk-src">console.cloud.google.com → APIs → YouTube Data API v3 → OAuth 2.0 Credentials</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-yt-id" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('YOUTUBE_CLIENT_ID','key-yt-id','st-yt-id')">Save</button>
-              </div>
-              <div class="sk-status" id="st-yt-id"></div>
-            </div>
-            <div class="sk-item">
-              <div class="sk-meta"><div class="sk-name">Client Secret</div></div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-yt-secret" placeholder="GOCSPX-xxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('YOUTUBE_CLIENT_SECRET','key-yt-secret','st-yt-secret')">Save</button>
-              </div>
-              <div class="sk-status" id="st-yt-secret"></div>
-            </div>
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Refresh Token</div>
-                <div class="sk-src">Run get_token.py on your Desktop → copy the REFRESH_TOKEN printed</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-yt-refresh" placeholder="1//04xxxxxxxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('YOUTUBE_REFRESH_TOKEN','key-yt-refresh','st-yt-refresh')">Save</button>
-                <button class="sk-test" onclick="testApiKey('youtube','st-yt-refresh')">Test</button>
-              </div>
-              <div class="sk-status" id="st-yt-refresh"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- FACEBOOK -->
-        <div class="card">
-          <div class="card-label">👍 Facebook — Direct Upload</div>
-          <div class="sk-group">
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Page ID</div>
-                <div class="sk-src">developers.facebook.com/tools/explorer → GET /me/accounts → copy id</div>
-              </div>
-              <div class="sk-row">
-                <input type="text" class="inp sk-inp" id="key-fb-page" placeholder="123456789012345 (numbers only)" autocomplete="off"/>
-                <button class="sk-save" onclick="saveApiKey('FACEBOOK_PAGE_ID','key-fb-page','st-fb-page')">Save</button>
-              </div>
-              <div class="sk-status" id="st-fb-page"></div>
-            </div>
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">Access Token</div>
-                <div class="sk-src">Graph API Explorer → Generate Access Token → add pages_manage_posts + publish_video</div>
-              </div>
-              <div class="sk-row">
-                <input type="password" class="inp sk-inp" id="key-fb-token" placeholder="EAAxxxxxxxxxxxxx" autocomplete="new-password"/>
-                <button class="sk-save" onclick="saveApiKey('FACEBOOK_ACCESS_TOKEN','key-fb-token','st-fb-token')">Save</button>
-                <button class="sk-test" onclick="testApiKey('facebook','st-fb-token')">Test</button>
-              </div>
-              <div class="sk-status" id="st-fb-token"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- N8N WEBHOOK -->
-        <div class="card">
-          <div class="card-label">🔗 n8n Webhook Integration</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:1rem;line-height:1.6">
-            Connect FitBot to n8n to trigger automations after every video is posted.<br/>
-            The pipeline sends a webhook with the video URL, title, caption, and platform results.
-          </div>
-          <div class="sk-group">
-            <div class="sk-item">
-              <div class="sk-meta">
-                <div class="sk-name">n8n Webhook URL <span class="sk-tag sk-free">Optional</span></div>
-                <div class="sk-src">n8n → New Workflow → Webhook node → copy URL → paste here</div>
-              </div>
-              <div class="sk-row">
-                <input type="text" class="inp sk-inp" id="key-n8n" placeholder="https://your-n8n.app.n8n.cloud/webhook/xxxxxx" autocomplete="off"/>
-                <button class="sk-save" onclick="saveApiKey('N8N_WEBHOOK_URL','key-n8n','st-n8n')">Save</button>
-                <button class="sk-test" onclick="testN8n()">Send Test</button>
-              </div>
-              <div class="sk-status" id="st-n8n"></div>
-            </div>
-          </div>
-          <div style="margin-top:1rem;padding:0.9rem;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)">
-            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">Payload sent to n8n after each run</div>
-            <div style="font-size:10px;color:var(--muted);font-family:var(--mono);line-height:1.8">
-              {<br/>
-              &nbsp;&nbsp;"title": "7 Exercises That Build Muscle Fast",<br/>
-              &nbsp;&nbsp;"caption": "Stop wasting time... 💪🔥",<br/>
-              &nbsp;&nbsp;"hashtags": ["#fitness","#workout",...],<br/>
-              &nbsp;&nbsp;"youtube_id": "dQw4w9WgXcQ",<br/>
-              &nbsp;&nbsp;"cdn_url": "https://res.cloudinary.com/...",<br/>
-              &nbsp;&nbsp;"results": {"youtube":true,"facebook":true,...},<br/>
-              &nbsp;&nbsp;"timestamp": "2025-08-18T09:00:00Z"<br/>
-              }
-            </div>
-          </div>
-        </div>
-
-        <!-- CHANNEL SETTINGS -->
-        <div class="card">
-          <div class="card-label">📺 Channel Settings</div>
-          <div class="sk-group">
-            <div class="sk-item">
-              <div class="sk-meta"><div class="sk-name">Channel Name</div><div class="sk-src">Shown as @watermark on every video</div></div>
-              <div class="sk-row">
-                <input type="text" class="inp sk-inp" id="key-channel" placeholder="Mhed Fitness &amp; Sports" autocomplete="off"/>
-                <button class="sk-save" onclick="saveApiKey('CHANNEL_NAME','key-channel','st-channel')">Save</button>
-              </div>
-              <div class="sk-status" id="st-channel"></div>
-            </div>
-            <div class="sk-item">
-              <div class="sk-meta"><div class="sk-name">Niche</div><div class="sk-src">AI uses this to write on-topic scripts every day</div></div>
-              <div class="sk-row">
-                <input type="text" class="inp sk-inp" id="key-niche" placeholder="fitness and sports" autocomplete="off"/>
-                <button class="sk-save" onclick="saveApiKey('NICHE','key-niche','st-niche')">Save</button>
-              </div>
-              <div class="sk-status" id="st-niche"></div>
-            </div>
-            <div class="sk-item">
-              <div class="sk-meta"><div class="sk-name">TTS Voice</div><div class="sk-src">Microsoft Edge neural voice for voiceover — free, unlimited</div></div>
-              <div class="sk-row">
-                <select class="inp sk-inp" id="key-voice">
-                  <option value="en-US-GuyNeural">en-US-GuyNeural (Male, energetic) — Default</option>
-                  <option value="en-US-JennyNeural">en-US-JennyNeural (Female, friendly)</option>
-                  <option value="en-US-AriaNeural">en-US-AriaNeural (Female, professional)</option>
-                  <option value="en-GB-RyanNeural">en-GB-RyanNeural (British male)</option>
-                  <option value="en-AU-NatashaNeural">en-AU-NatashaNeural (Australian female)</option>
-                </select>
-                <button class="sk-save" onclick="saveApiKey('TTS_VOICE','key-voice','st-voice')">Save</button>
-              </div>
-              <div class="sk-status" id="st-voice"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- STATUS SUMMARY -->
-        <div class="card">
-          <div class="card-label">🔐 Current Key Status</div>
-          <div id="keyStatusSummary" style="font-size:11px;color:var(--muted)">Loading...</div>
-        </div>
-
-      </div>
-      <!-- END SETTINGS PAGE -->
-
-<script>
 'use strict';
-
 // ════════════════════════════════════════════════════════════════
-// SECURITY MODEL
-// ─ SESSION_TOKEN  : stored in memory only, cleared on refresh/logout
-// ─ CSRF_TOKEN     : injected by server into <meta> at page-load time
-//                    (not generated by JS — prevents CSRF completely)
-// ─ All API calls  : require both tokens in headers
-// ─ API keys       : never sent to browser, all Claude calls proxy through server
+// FITBOT BACKEND — v3
+// AI Priority: Cerebras → Groq → OpenRouter → Gemini → Cache
+// Video: Pexels stock clips + ffmpeg assembly (free, unlimited)
 // ════════════════════════════════════════════════════════════════
 
-let SESSION_TOKEN = null;
+require('dotenv').config();
 
-// BUG 2 FIX: brute-force protection on login
-let loginAttempts = 0;
-const LOGIN_MAX = 5;
-let loginLockedUntil = 0;
+const http   = require('http');
+const https  = require('https');
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
 
-// BUG 10 FIX: read CSRF token from meta tag injected by server at render time
-function getCsrfToken() {
-  return document.querySelector('meta[name="csrf-token"]')?.content || '';
-}
+// ── ENV VALIDATION ────────────────────────────────────────────
+(function validateEnv() {
+  const required = ['DASHBOARD_PASSWORD_HASH', 'SESSION_SECRET'];
+  const missing  = required.filter(k => !process.env[k]);
+  if (missing.length) {
+    missing.forEach(k => console.error(`[FATAL] Missing .env: ${k}`));
+    process.exit(1);
+  }
+  if (process.env.SESSION_SECRET.length < 32) {
+    console.error('[FATAL] SESSION_SECRET must be at least 32 characters');
+    process.exit(1);
+  }
+  // AI keys — all optional, pipeline falls back to script cache
+  const AI_KEYS = {
+    'CEREBRAS_API_KEY' : 'cloud.cerebras.ai  — 1,000,000 tokens/day FREE ← BEST',
+    'GROQ_API_KEY'     : 'console.groq.com   — 14,400 req/day FREE',
+    'OPENROUTER_API_KEY': 'openrouter.ai      — 200 req/day FREE',
+    'GEMINI_API_KEY'   : 'aistudio.google.com — 1,500 req/day FREE',
+  };
+  const found = Object.keys(AI_KEYS).filter(k => process.env[k]);
+  if (!found.length) {
+    console.warn('[WARN] No AI key set — using pre-written script cache');
+    console.warn('[BEST] Add CEREBRAS_API_KEY from cloud.cerebras.ai (email only, no card)');
+    Object.entries(AI_KEYS).forEach(([k, v]) => console.warn(`       ${k}: ${v}`));
+  } else {
+    console.log(`[INFO] AI providers ready: ${found.join(', ')}`);
+  }
+})();
 
-const STATE = {
-  trends : [],
-  scripts: [],
-  queue  : [],
-  videos : [],
-  posted : 0
+const PORT     = parseInt(process.env.PORT) || 3000;
+const PWD_HASH = process.env.DASHBOARD_PASSWORD_HASH;
+
+// ── AI Provider keys ──────────────────────────────────────────
+const AI = {
+  cerebras  : { key: process.env.CEREBRAS_API_KEY   || '', host: 'api.cerebras.ai',    path: '/v1/chat/completions',            models: ['llama-3.3-70b','llama3.1-70b','llama3.1-8b'] },
+  groq      : { key: process.env.GROQ_API_KEY        || '', host: 'api.groq.com',       path: '/openai/v1/chat/completions',     models: ['llama-3.3-70b-versatile','llama3-70b-8192','llama-3.1-8b-instant'] },
+  openrouter: { key: process.env.OPENROUTER_API_KEY  || '', host: 'openrouter.ai',      path: '/api/v1/chat/completions',        models: ['meta-llama/llama-3.3-70b-instruct:free','deepseek/deepseek-v3:free'] },
+};
+
+// ── LOGGING ───────────────────────────────────────────────────
+const log = (msg, level = 'INFO') => {
+  const safe = String(msg).replace(/[\r\n]/g, ' ').slice(0, 500);
+  console.log(`[${new Date().toISOString()}] [${level}] ${safe}`);
 };
 
 // ════════════════════════════════════════════════════════════════
-// HELPERS
+// SESSION STORE
 // ════════════════════════════════════════════════════════════════
+const sessions = new Map();
 
-// Escape ALL untrusted strings before innerHTML
-function esc(str) {
-  if (typeof str !== 'string') str = String(str ?? '');
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
+function generateToken() { return crypto.randomBytes(32).toString('hex'); }
+
+function createSession(email) {
+  const token = generateToken(), csrfToken = generateToken();
+  sessions.set(token, { email, csrfToken, createdAt: Date.now(), trends: [], queue: [] });
+  return { token, csrfToken };
 }
 
-// Strip dangerous chars from user-typed input
+function validateSession(sessionToken, csrfToken) {
+  if (!sessionToken || !csrfToken) return null;
+  const s = sessions.get(sessionToken);
+  if (!s || s.csrfToken !== csrfToken) return null;
+  if (Date.now() - s.createdAt > 86400000) { sessions.delete(sessionToken); return null; }
+  return s;
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - 86400000;
+  for (const [t, s] of sessions) if (s.createdAt < cutoff) sessions.delete(t);
+}, 1800000);
+
+// ── RATE LIMITING ─────────────────────────────────────────────
+const loginAttempts = new Map();
+function checkRateLimit(ip) {
+  const e = loginAttempts.get(ip) || { count: 0, lockedUntil: 0 };
+  if (Date.now() < e.lockedUntil) return { blocked: true, secs: Math.ceil((e.lockedUntil - Date.now()) / 1000) };
+  return { blocked: false };
+}
+function recordFail(ip) {
+  const e = loginAttempts.get(ip) || { count: 0, lockedUntil: 0 };
+  e.count++;
+  if (e.count >= 5) { e.lockedUntil = Date.now() + 60000; e.count = 0; }
+  loginAttempts.set(ip, e);
+}
+function resetFails(ip) { loginAttempts.delete(ip); }
+
+// ── HELPERS ───────────────────────────────────────────────────
+const ALLOWED_SOURCES = new Set(['YouTube', 'TikTok', 'Google Trends', 'Social Blade']);
+
 function sanitize(str, max = 200) {
   return (typeof str === 'string' ? str : '')
-    .replace(/[<>"'`\n\r]/g, '')
-    .trim()
-    .slice(0, max);
+    .replace(/[<>"'`\n\r\\/]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
-// Set text in any element safely (textContent only)
-function setText(id, txt) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = String(txt ?? '');
+function readBody(req, maxBytes = 50 * 1024) {
+  return new Promise((resolve, reject) => {
+    let data = '', size = 0;
+    req.on('data', c => {
+      if ((size += c.length) > maxBytes) { req.destroy(); reject(new Error('Body too large')); return; }
+      data += c;
+    });
+    req.on('end', () => { try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid JSON')); } });
+    req.on('error', reject);
+  });
 }
 
-// BUG 3 FIX: all error display goes through this (textContent, never innerHTML)
-function showLoginError(msg) {
-  document.getElementById('loginError').textContent = sanitize(msg, 120);
+function sendJSON(res, status, data) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff' });
+  res.end(JSON.stringify(data));
+}
+function sendHTML(res, status, html) {
+  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff' });
+  res.end(html);
+}
+function requireAuth(req, res) {
+  const tok  = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const csrf = req.headers['x-csrf-token'] || '';
+  const s    = validateSession(tok, csrf);
+  if (!s) { sendJSON(res, 401, { error: 'Unauthorized' }); return null; }
+  return s;
 }
 
 // ════════════════════════════════════════════════════════════════
-// SECURE API HELPER
+// AI SCRIPT GENERATION
+// Priority: Cerebras (1M tokens/day) → Groq → OpenRouter → Cache
 // ════════════════════════════════════════════════════════════════
-async function apiCall(endpoint, method = 'GET', body = null) {
-  if (!SESSION_TOKEN) { logout(); return null; }
 
-  const opts = {
-    method,
-    headers: {
+function callProvider(provider, prompt) {
+  return new Promise((resolve, reject) => {
+    const p    = AI[provider];
+    const model = p.models[0];
+    const body  = JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: 'You are a fitness YouTube content expert. Return valid JSON only. No markdown.' },
+        { role: 'user',   content: prompt },
+      ],
+      temperature: 0.7,
+      max_tokens : 600,
+      response_format: { type: 'json_object' },
+    });
+
+    const headers = {
       'Content-Type'  : 'application/json',
-      'Authorization' : `Bearer ${SESSION_TOKEN}`,
-      // BUG 10 FIX: CSRF token comes from server-injected meta tag
-      'X-CSRF-Token'  : getCsrfToken()
+      'Authorization' : `Bearer ${p.key}`,
+      'Content-Length': Buffer.byteLength(body),
+    };
+    if (provider === 'openrouter') {
+      headers['HTTP-Referer'] = 'https://github.com/fitbot-ai';
+      headers['X-Title']      = 'FitBot AI';
     }
+
+    const req = https.request({
+      hostname: p.host,
+      path    : p.path,
+      method  : 'POST',
+      headers,
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          if (res.statusCode === 429) { reject(new Error('RATE_LIMIT')); return; }
+          if (res.statusCode === 401 || res.statusCode === 403) { reject(new Error('INVALID_KEY')); return; }
+          if (res.statusCode !== 200) { reject(new Error(`HTTP_${res.statusCode}`)); return; }
+          const json = JSON.parse(data);
+          const text = json.choices?.[0]?.message?.content;
+          if (!text) { reject(new Error('Empty response')); return; }
+          resolve(JSON.parse(text.replace(/```json|```/g, '').trim()));
+        } catch(e) { reject(e); }
+      });
+    });
+    req.setTimeout(20000, () => { req.destroy(); reject(new Error('TIMEOUT')); });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+// Script cache — 7 pre-written scripts rotated by day of week
+const SCRIPT_CACHE = [
+  { hook: 'Stop wasting time on exercises that barely work.',           body: 'These 7 moves activate more muscle fibres in less time. Add them today and feel the difference in one week. No expensive equipment needed at all.',    cta: 'Save this and try it at your next session!',              caption: '7 exercises that build muscle fast 💪🔥',     hashtags: ['#fitness','#workout','#gym','#muscle','#gains']    },
+  { hook: 'You are training hard but the fat is not moving.',           body: 'The problem is not your workout — it is your recovery and sleep. Fix these first and watch everything change completely within weeks.',                 cta: 'Follow for more honest fitness tips every day.',          caption: 'The truth about fat loss nobody tells you 😮🔥', hashtags: ['#fatloss','#fitness','#health','#workout','#gym']   },
+  { hook: 'No time to train? Seven minutes is all you need.',           body: 'This circuit hits every major muscle group fast. No equipment, no gym, no excuses. Just 7 minutes and real results starting from day one.',             cta: 'Comment your results after 30 days below!',              caption: '7 minute workout that builds strength 🔥💪',   hashtags: ['#homeworkout','#fitness','#strength','#noequipment','#health'] },
+  { hook: 'Sore muscles are slowing your progress every single day.',   body: 'These 5 recovery moves reduce soreness significantly. Do them after every session and train harder the very next day without burning out at all.',     cta: 'Save this — you will need it after leg day!',            caption: '5 moves that speed up recovery 💪⚡',          hashtags: ['#recovery','#fitness','#gym','#workout','#health'] },
+  { hook: 'Steady state cardio is the slowest way to burn fat.',        body: 'Switch to this interval method and burn three times more calories in half the time. Your body composition will change faster than you ever expected.',   cta: 'Switch today and see real results in just 2 weeks!',     caption: 'You have been doing cardio wrong 🏃🔥',        hashtags: ['#cardio','#fatloss','#HIIT','#fitness','#workout'] },
+  { hook: 'Most people train legs wrong and never know it.',            body: 'They focus only on squats and miss three key muscle groups completely. Fix this technique today and your legs will grow twice as fast as before.',       cta: 'Tag someone who skips leg day — they need this!',        caption: 'You have been training legs wrong 😤🦵',       hashtags: ['#legday','#squats','#fitness','#gym','#muscle']    },
+  { hook: 'Bad posture makes you look weaker and feel worse every day.',body: 'These three exercises correct years of desk damage in just 10 minutes a day. Start tonight and feel taller and stronger by tomorrow morning.',          cta: 'Save this and do it before bed tonight!',                caption: 'Fix bad posture in 10 minutes a day 🙆💪',     hashtags: ['#posture','#fitness','#health','#workout','#gym']  },
+];
+
+function getCachedScript(topic) {
+  const s = SCRIPT_CACHE[new Date().getDay()];
+  return {
+    hook    : s.hook,
+    body    : topic ? `About "${topic}" — ` + s.body : s.body,
+    cta     : s.cta,
+    caption : (topic ? topic + ' 💪🔥 ' : '') + s.caption,
+    hashtags: s.hashtags,
   };
-  if (body) opts.body = JSON.stringify(body);
-
-  const res = await fetch(endpoint, opts);
-  if (res.status === 401) { logout(); return null; }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(sanitize(err.error || 'Request failed', 200));
-  }
-  return await res.json();
 }
 
-// ════════════════════════════════════════════════════════════════
-// LOGIN / LOGOUT
-// ════════════════════════════════════════════════════════════════
-async function login() {
-  // BUG 2 FIX: client-side brute-force rate limiting
-  if (Date.now() < loginLockedUntil) {
-    const secs = Math.ceil((loginLockedUntil - Date.now()) / 1000);
-    showLoginError(`Too many attempts. Wait ${secs}s.`);
-    return;
-  }
+async function generateScript(topic, source) {
+  const safeTopic  = sanitize(topic, 80);
+  const safeSource = ALLOWED_SOURCES.has(source) ? source : 'fitness platform';
 
-  const email    = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  if (!email || !password) { showLoginError('Email and password required'); return; }
+  const prompt = (
+    `Fitness YouTube content for "Mhed Fitness & Sports".\n` +
+    `Topic from ${safeSource}: "${safeTopic}"\n` +
+    `Return JSON: {"hook":"opening line max 100 chars","body":"3-4 sentences max 220 chars","cta":"call to action max 80 chars","caption":"caption with emojis max 400 chars","hashtags":["#tag1","#tag2","#tag3","#tag4","#tag5"]}`
+  );
 
-  const btn = document.getElementById('loginBtn');
-  btn.disabled = true;
-  btn.textContent = 'Logging in...';
+  // Try providers in priority order
+  const providers = [
+    { name: 'Cerebras',   key: 'cerebras',   id: 'cerebras'   },
+    { name: 'Groq',       key: 'groq',       id: 'groq'       },
+    { name: 'OpenRouter', key: 'openrouter', id: 'openrouter' },
+  ];
 
-  try {
-    // BUG 4 NOTE: correct pattern — send over HTTPS, bcrypt on server
-    const res = await fetch('/auth/login', {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify({ email, password })
-    });
-
-    if (!res.ok) {
-      loginAttempts++;
-      if (loginAttempts >= LOGIN_MAX) {
-        loginLockedUntil = Date.now() + 60_000; // 60s lockout
-        loginAttempts = 0;
-        showLoginError('Too many failed attempts. Locked for 60 seconds.');
-      } else {
-        const left = LOGIN_MAX - loginAttempts;
-        showLoginError(`Wrong credentials — ${left} attempt${left === 1 ? '' : 's'} left`);
-      }
-      return;
+  for (const p of providers) {
+    if (!AI[p.id].key) {
+      log(`${p.name}: no key set — skipping`);
+      continue;
     }
-
-    loginAttempts = 0;
-    const data = await res.json();
-    SESSION_TOKEN = data.token; // memory only — never localStorage
-
-    // Clear credentials from DOM immediately
-    document.getElementById('loginEmail').value    = '';
-    document.getElementById('loginPassword').value = '';
-
-    document.getElementById('loginPage').style.display  = 'none';
-    document.getElementById('appShell').style.display   = 'grid';
-    // BUG 3 FIX: textContent only
-    document.getElementById('userDisplay').textContent  = email;
-
-    slog('Authenticated successfully', 'success');
-    loadData();
-  } catch(e) {
-    showLoginError('Network error — check your connection');
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Login';
-  }
-}
-
-function logout() {
-  SESSION_TOKEN    = null;
-  STATE.trends     = [];
-  STATE.scripts    = [];
-  STATE.queue      = [];
-  STATE.posted     = 0;
-  document.getElementById('appShell').style.display  = 'none';
-  document.getElementById('loginPage').style.display = 'flex';
-  document.getElementById('loginError').textContent  = '';
-}
-
-// ════════════════════════════════════════════════════════════════
-// LOAD SERVER DATA
-// ════════════════════════════════════════════════════════════════
-async function loadData() {
-  try {
-    const data = await apiCall('/api/user-data');
-    if (!data) return;
-    STATE.trends  = Array.isArray(data.trends)  ? data.trends  : [];
-    STATE.scripts = Array.isArray(data.scripts) ? data.scripts : [];
-    STATE.queue   = Array.isArray(data.queue)   ? data.queue   : [];
-    STATE.videos  = Array.isArray(data.videos)  ? data.videos  : [];
-    STATE.posted  = Number(data.posted) || 0;
-    renderTrends();
-    renderQueue();
-    updateMetrics();
-  } catch(e) {
-    slog('Load failed: ' + e.message, 'error');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// NAVIGATION
-// BUG 7 FIX: showPage uses data-page attribute, not fragile innerHTML selector
-// ════════════════════════════════════════════════════════════════
-function showPage(id, el) {
-  const allowed = new Set(['research', 'scripts', 'video', 'queue']);
-  if (!allowed.has(id)) return;
-
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  if (el) el.classList.add('active');
-
-  const titles = { research: 'Trends', scripts: 'Scripts', video: 'Video Generator', queue: 'Queue' };
-  setText('pageTitle', titles[id]);
-
-  if (id === 'scripts') refreshTrendSelect();
-  if (id === 'queue')   renderQueue();
-  if (id === 'video')   renderVideoHistory();
-}
-
-// ════════════════════════════════════════════════════════════════
-// TRENDS
-// BUG 6 FIX: ALL fields from server data go through esc() before innerHTML
-// ════════════════════════════════════════════════════════════════
-async function addTrend() {
-  const topic  = sanitize(document.getElementById('trendTopic').value, 80);
-  const source = document.getElementById('trendSource').value;   // whitelist select
-  const notes  = sanitize(document.getElementById('trendNotes').value, 200);
-
-  if (!topic || !source) { alert('Topic and source are required'); return; }
-
-  // Whitelist sources — only values from the select are allowed
-  const allowedSources = new Set(['YouTube','TikTok','Google Trends','Social Blade']);
-  if (!allowedSources.has(source)) { alert('Invalid source'); return; }
-
-  try {
-    const result = await apiCall('/api/trends', 'POST', { topic, source, notes });
-    if (!result) return;
-    STATE.trends.push(result);
-    document.getElementById('trendTopic').value  = '';
-    document.getElementById('trendSource').value = '';
-    document.getElementById('trendNotes').value  = '';
-    renderTrends();
-    updateMetrics();
-    slog('Trend added: ' + topic, 'success');
-  } catch(e) {
-    slog('Error: ' + e.message, 'error');
-  }
-}
-
-function renderTrends() {
-  const container = document.getElementById('trendsContainer');
-  if (!STATE.trends.length) {
-    container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>No trends yet</div>';
-    return;
-  }
-  // BUG 6 FIX: topic, source, and date all escaped
-  container.innerHTML = `<div class="trend-cards">${
-    STATE.trends.map((t, i) => `
-      <div class="trend-card" onclick="pickTrendForScript(${i})">
-        <div class="trend-name">${esc(t.topic)}</div>
-        <div class="trend-src">${esc(t.source)} · ${esc(new Date(t.date).toLocaleDateString())}</div>
-      </div>`
-    ).join('')
-  }</div>`;
-}
-
-// BUG 7 FIX: use data-page attribute to find nav item reliably
-function pickTrendForScript(i) {
-  if (typeof i !== 'number' || i < 0 || i >= STATE.trends.length) return;
-  document.getElementById('trendSelect').value = String(i);
-  const navEl = document.querySelector('.nav-item[data-page="scripts"]');
-  showPage('scripts', navEl);
-}
-
-function refreshTrendSelect() {
-  const sel = document.getElementById('trendSelect');
-  sel.innerHTML = STATE.trends.length
-    ? STATE.trends.map((t, i) => `<option value="${i}">${esc(t.topic)}</option>`).join('')
-    : '<option value="">No trends yet</option>';
-}
-
-// ════════════════════════════════════════════════════════════════
-// SCRIPTS
-// ════════════════════════════════════════════════════════════════
-async function generateScript() {
-  const idx = parseInt(document.getElementById('trendSelect').value, 10);
-  if (isNaN(idx) || idx < 0 || idx >= STATE.trends.length) {
-    alert('Please select a trend first'); return;
+    try {
+      log(`Trying ${p.name} for topic: ${safeTopic}`);
+      const data = await callProvider(p.id, prompt);
+      if (data?.hook) {
+        log(`${p.name} succeeded`);
+        return data;
+      }
+    } catch(e) {
+      if (e.message === 'INVALID_KEY') {
+        log(`${p.name}: invalid API key`, 'ERROR');
+        continue;
+      }
+      if (e.message === 'RATE_LIMIT') {
+        log(`${p.name}: rate limited — trying next`, 'WARN');
+        continue;
+      }
+      log(`${p.name}: ${e.message}`, 'WARN');
+    }
   }
 
-  const trend = STATE.trends[idx];
-  slog('Generating script for: ' + trend.topic, 'info');
+  // Gemini fallback (different SDK format)
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      log('Trying Gemini fallback...');
+      const data = await callGemini(prompt);
+      if (data?.hook) return data;
+    } catch(e) {
+      log(`Gemini: ${e.message}`, 'WARN');
+    }
+  }
 
-  const btn = document.getElementById('genBtn');
-  btn.disabled    = true;
-  btn.textContent = 'Generating…';
+  log('All AI providers failed — using script cache', 'WARN');
+  return getCachedScript(safeTopic);
+}
 
-  try {
-    const script = await apiCall('/api/generate-script', 'POST', {
-      trendId: trend.id,
-      topic  : trend.topic,
-      source : trend.source
+function callGemini(prompt) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 600, temperature: 0.7 },
     });
-    if (!script) return;
+    const req = https.request({
+      hostname: 'generativelanguage.googleapis.com',
+      path    : `/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      method  : 'POST',
+      headers : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.error) { reject(new Error(json.error.message)); return; }
+          const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          resolve(JSON.parse(text.replace(/```json|```/g, '').trim()));
+        } catch(e) { reject(e); }
+      });
+    });
+    req.setTimeout(20000, () => { req.destroy(); reject(new Error('Gemini timeout')); });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
 
-    // BUG 9 FIX: store a fresh copy — never mutate the object returned from server
-    window._currentScript = Object.assign({}, script);
+// ════════════════════════════════════════════════════════════════
+// HTTP SERVER
+// ════════════════════════════════════════════════════════════════
+const server = http.createServer(async (req, res) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'no-referrer');
 
-    // Use textContent for display (safe, no XSS possible)
-    document.getElementById('scriptHook').textContent    = script.hook    || '';
-    document.getElementById('scriptBody').textContent    = script.body    || '';
-    document.getElementById('scriptCTA').textContent     = script.cta     || '';
-    document.getElementById('scriptCaption').value       = script.caption || '';
-    document.getElementById('scriptVideoPrompt').value   = script.videoPrompt || '';
+  const ip  = req.socket.remoteAddress || 'unknown';
+  const url = req.url.split('?')[0];
 
-    document.getElementById('scriptOutput').style.display = 'block';
-    slog('Script ready', 'success');
-  } catch(e) {
-    slog('Error: ' + e.message, 'error');
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Generate Script';
+  // Serve frontend
+  if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
+    // Try multiple possible locations for index.html
+    const possiblePaths = [
+      path.resolve(__dirname, '..', 'index.html'),      // local: backend/../index.html
+      path.resolve(__dirname, 'index.html'),             // same folder
+      path.resolve(process.cwd(), 'index.html'),         // Railway: working directory
+      path.resolve(process.cwd(), '..', 'index.html'),   // one level up
+    ];
+    let html = null;
+    for (const p of possiblePaths) {
+      try {
+        html = fs.readFileSync(p, 'utf8');
+        break;
+      } catch {}
+    }
+    if (html) {
+      sendHTML(res, 200, html);
+    } else {
+      // Serve a simple working page if index.html not found
+      sendHTML(res, 200, `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FitBot</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#05050a;color:#eeeaf8;font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.box{background:#0c0c14;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:2.5rem;width:360px;text-align:center}
+h1{font-size:2rem;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;color:#fff}
+p{font-size:11px;color:rgba(238,234,248,0.45);margin-bottom:1.5rem;letter-spacing:0.1em;text-transform:uppercase}
+input{width:100%;background:#12121e;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:0.8rem 1rem;color:#eeeaf8;font-size:13px;outline:none;margin-bottom:0.75rem}
+input:focus{border-color:#00ff88}
+button{width:100%;background:#00ff88;color:#05050a;border:none;padding:0.8rem;border-radius:10px;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer}
+.err{color:#ff4d6d;font-size:11px;margin-top:0.75rem;min-height:18px}
+.note{font-size:10px;color:rgba(238,234,248,0.3);margin-top:1rem;line-height:1.6;background:#12121e;padding:0.75rem;border-radius:8px;text-align:left}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>FITBOT</h1>
+  <p>Mhed Fitness Content Studio</p>
+  <input type="email" id="e" placeholder="your@email.com" onkeydown="if(event.key==='Enter')login()"/>
+  <input type="password" id="p" placeholder="Password" onkeydown="if(event.key==='Enter')login()"/>
+  <button onclick="login()" id="btn">LOGIN</button>
+  <div class="err" id="err"></div>
+  <div class="note">🔒 Secure server authentication. No API keys stored in browser.</div>
+</div>
+<script>
+async function login(){
+  const e=document.getElementById('e').value;
+  const p=document.getElementById('p').value;
+  const btn=document.getElementById('btn');
+  const err=document.getElementById('err');
+  if(!e||!p){err.textContent='Email and password required';return;}
+  btn.textContent='Signing in...';btn.disabled=true;
+  try{
+    const r=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p})});
+    const d=await r.json();
+    if(r.ok){
+      sessionStorage.setItem('token',d.token);
+      sessionStorage.setItem('csrf',d.csrfToken);
+      err.style.color='#00ff88';
+      err.textContent='Login successful! Dashboard loading...';
+      setTimeout(()=>{ window.location.href='/dashboard'; },500);
+    } else {
+      err.style.color='#ff4d6d';
+      err.textContent=d.message||'Wrong credentials';
+    }
+  }catch(ex){
+    err.style.color='#ff4d6d';
+    err.textContent='Connection error — try again';
   }
-}
-
-async function queueScript() {
-  if (!window._currentScript) { alert('Generate a script first'); return; }
-
-  // BUG 9 FIX: work on a copy so _currentScript is never mutated
-  const scriptCopy = Object.assign({}, window._currentScript);
-  scriptCopy.caption = document.getElementById('scriptCaption').value.slice(0, 2200);
-
-  try {
-    const result = await apiCall('/api/queue', 'POST', { script: scriptCopy });
-    if (!result) return;
-    STATE.queue.push(result);
-    STATE.scripts.push(scriptCopy);
-    updateMetrics();
-    document.getElementById('scriptOutput').style.display = 'none';
-    slog('Added to queue', 'success');
-  } catch(e) {
-    slog('Queue error: ' + e.message, 'error');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// QUEUE
-// BUG 6 FIX: all fields escaped; BUG 8 FIX: index validated before splice
-// ════════════════════════════════════════════════════════════════
-const PLATFORM_ICONS = { TikTok:'🎵', Instagram:'📸', YouTube:'▶️', Facebook:'👍' };
-const ALLOWED_STATUSES = new Set(['queued','posted','failed']);
-
-function renderQueue() {
-  const container = document.getElementById('queueContainer');
-  if (!STATE.queue.length) {
-    container.innerHTML = '<div class="empty"><div class="empty-icon">📅</div>No posts queued</div>';
-    return;
-  }
-  container.innerHTML = `<div class="queue-list">${
-    STATE.queue.map((q, i) => {
-      const safeStatus = ALLOWED_STATUSES.has(q.status) ? q.status : 'queued';
-      const icon = PLATFORM_ICONS[q.platform] || '📱';
-      return `<div class="queue-item">
-        <div class="queue-platform">${icon}</div>
-        <div>
-          <div class="queue-title">${esc(q.title)}</div>
-          <div class="queue-meta">${esc(q.platform)} · ${esc(new Date(q.date).toLocaleDateString())}</div>
-        </div>
-        <div class="queue-status">${safeStatus}</div>
-        <button class="queue-delete" onclick="deleteQueueItem(${i})">✕</button>
-      </div>`;
-    }).join('')
-  }</div>`;
-}
-
-async function deleteQueueItem(i) {
-  // BUG 8 FIX: validate index before use
-  if (typeof i !== 'number' || !isFinite(i) || i < 0 || i >= STATE.queue.length) return;
-  const item = STATE.queue[i];
-  try {
-    await apiCall(`/api/queue/${encodeURIComponent(item.id)}`, 'DELETE');
-    STATE.queue.splice(i, 1);
-    renderQueue();
-    updateMetrics();
-  } catch(e) {
-    slog('Delete failed: ' + e.message, 'error');
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// LOG (script tab)
-// BUG 5 FIX: build DOM nodes manually — no log-${type} innerHTML interpolation
-// ════════════════════════════════════════════════════════════════
-const ALLOWED_LOG_TYPES = new Set(['info','success','error','warn']);
-
-function slog(msg, type = 'info') {
-  const safeType = ALLOWED_LOG_TYPES.has(type) ? type : 'info';
-  const box = document.getElementById('scriptLog');
-  if (!box) return;
-
-  const now  = new Date().toTimeString().slice(0, 8);
-  const line = document.createElement('div');
-  line.className = 'log-line';
-
-  const t = document.createElement('span');
-  t.className   = 'log-time';
-  t.textContent = now;
-
-  const m = document.createElement('span');
-  // BUG 5 FIX: className built from whitelist, never from user input
-  m.className   = 'log-' + safeType;
-  m.textContent = String(msg).slice(0, 300); // textContent — safe
-
-  line.appendChild(t);
-  line.appendChild(m);
-  box.appendChild(line);
-  while (box.children.length > 20) box.removeChild(box.firstChild);
-  box.scrollTop = box.scrollHeight;
-}
-
-// ════════════════════════════════════════════════════════════════
-// METRICS
-// ════════════════════════════════════════════════════════════════
-function updateMetrics() {
-  setText('m-trends',  STATE.trends.length);
-  setText('m-scripts', STATE.scripts.length);
-  setText('m-queue',   STATE.queue.length);
-  setText('m-posted',  STATE.posted);
-}
-
-// Init
-updateMetrics();
-
-// ════════════════════════════════════════════════════════════════
-// VIDEO GENERATION — WaveSpeed LTX-2.3
-// ════════════════════════════════════════════════════════════════
-
-// Navigate to video page pre-filled with this script's video prompt
-function goMakeVideo() {
-  const prompt = document.getElementById('scriptVideoPrompt').value.trim();
-  if (prompt) document.getElementById('videoPromptInput').value = prompt;
-  const navEl = document.querySelector('.nav-item[data-page="video"]');
-  showPage('video', navEl);
-}
-
-async function generateVideo() {
-  const prompt = document.getElementById('videoPromptInput').value.trim();
-  if (!prompt) { alert('Enter a video prompt first'); return; }
-
-  const btn = document.getElementById('genVideoBtn');
-  btn.disabled    = true;
-  btn.textContent = 'Generating… (up to 3 min)';
-
-  document.getElementById('videoOutput').style.display = 'none';
-  vlog('Submitting to WaveSpeed LTX-2.3…', 'info');
-  vlog('This takes 1–3 minutes — please wait', 'warn');
-
-  try {
-    const result = await apiCall('/api/generate-video', 'POST', { videoPrompt: prompt });
-    if (!result) return;
-
-    // Show video player
-    const player   = document.getElementById('videoPlayer');
-    const download = document.getElementById('videoDownload');
-    player.src  = result.videoUrl;
-    download.href = result.videoUrl;
-    document.getElementById('videoOutput').style.display = 'block';
-
-    // Store in STATE
-    STATE.videos.push(result);
-    renderVideoHistory();
-    vlog('Video ready! Click play to preview.', 'success');
-  } catch(e) {
-    vlog('Error: ' + e.message, 'error');
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = '🎬 Generate Video';
-  }
-}
-
-function renderVideoHistory() {
-  const container = document.getElementById('videoList');
-  if (!STATE.videos.length) {
-    container.innerHTML = '<div class="empty"><div class="empty-icon">🎬</div>No videos yet</div>';
-    return;
-  }
-  container.innerHTML = STATE.videos.slice().reverse().map((v, i) => `
-    <div style="display:flex;align-items:center;gap:12px;padding:0.75rem 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:22px">🎬</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.prompt)}</div>
-        <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">${new Date(v.createdAt).toLocaleString()}</div>
-      </div>
-      <a href="${esc(v.videoUrl)}" download="fitbot-video.mp4" class="btn" style="font-size:9px;padding:4px 10px">⬇</a>
-    </div>
-  `).join('');
-}
-
-function vlog(msg, type = 'info') {
-  const box = document.getElementById('videoLog');
-  if (!box) return;
-  const safeType = ALLOWED_LOG_TYPES.has(type) ? type : 'info';
-  const now = new Date().toTimeString().slice(0, 8);
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  const t = document.createElement('span'); t.className = 'log-time'; t.textContent = now;
-  const m = document.createElement('span'); m.className = 'log-' + safeType; m.textContent = String(msg).slice(0, 300);
-  line.appendChild(t); line.appendChild(m);
-  box.appendChild(line);
-  while (box.children.length > 20) box.removeChild(box.firstChild);
-  box.scrollTop = box.scrollHeight;
+  btn.textContent='LOGIN';btn.disabled=false;
 }
 </script>
-
 </body>
-</html>
+</html>`);
+    }
+    return;
+  }
+
+  // Config
+  if (req.method === 'GET' && url === '/api/config') {
+    sendJSON(res, 200, {
+      hasCerebras  : !!AI.cerebras.key,
+      hasGroq      : !!AI.groq.key,
+      hasOpenRouter: !!AI.openrouter.key,
+      hasGemini    : !!process.env.GEMINI_API_KEY,
+      hasPexels    : !!process.env.PEXELS_API_KEY,
+      hasCloudinary: !!process.env.CLOUDINARY_URL,
+      hasBuffer    : !!process.env.BUFFER_API_KEY,
+      videoMethod  : 'Pexels stock clips + ffmpeg assembly (free, unlimited)',
+    });
+    return;
+  }
+
+  // Login
+  if (req.method === 'POST' && url === '/auth/login') {
+    const { blocked, secs } = checkRateLimit(ip);
+    if (blocked) { sendJSON(res, 429, { message: `Too many attempts. Wait ${secs}s.` }); return; }
+    try {
+      const { email, password } = await readBody(req);
+      if (typeof email !== 'string' || typeof password !== 'string') throw new Error('Invalid');
+      const hash = crypto.createHash('sha256').update(password).digest('hex');
+      if (hash !== PWD_HASH) {
+        recordFail(ip);
+        sendJSON(res, 401, { message: 'Invalid credentials' });
+        log(`Failed login: ${sanitize(email, 100)}`, 'WARN');
+        return;
+      }
+      resetFails(ip);
+      const { token, csrfToken } = createSession(sanitize(email, 200));
+      sendJSON(res, 200, { token, csrfToken });
+      log(`Login OK: ${sanitize(email, 100)}`);
+    } catch { sendJSON(res, 400, { error: 'Bad request' }); }
+    return;
+  }
+
+  // User data
+  if (req.method === 'GET' && url === '/api/user-data') {
+    const s = requireAuth(req, res);
+    if (!s) return;
+    sendJSON(res, 200, { trends: s.trends, scripts: [], queue: s.queue, posted: 0 });
+    return;
+  }
+
+  // Add trend
+  if (req.method === 'POST' && url === '/api/trends') {
+    const s = requireAuth(req, res);
+    if (!s) return;
+    try {
+      const { topic, source, notes } = await readBody(req);
+      if (!topic?.trim()) throw new Error('Topic required');
+      if (!ALLOWED_SOURCES.has(source)) throw new Error('Invalid source');
+      const trend = {
+        id    : crypto.randomUUID(),
+        topic : sanitize(topic, 80),
+        source,
+        notes : sanitize(notes || '', 200),
+        date  : new Date().toISOString(),
+      };
+      s.trends.push(trend);
+      sendJSON(res, 200, trend);
+      log(`Trend added: ${trend.topic}`);
+    } catch(e) { sendJSON(res, 400, { error: e.message }); }
+    return;
+  }
+
+  // Generate script
+  if (req.method === 'POST' && url === '/api/generate-script') {
+    const s = requireAuth(req, res);
+    if (!s) return;
+    try {
+      const { trendId, source } = await readBody(req);
+      const trend = s.trends.find(t => t.id === trendId);
+      if (!trend) throw new Error('Trend not found');
+      const script = await generateScript(trend.topic, source || trend.source);
+      sendJSON(res, 200, {
+        hook    : sanitize(script.hook    || '', 200),
+        body    : sanitize(script.body    || '', 600),
+        cta     : sanitize(script.cta     || '', 200),
+        caption : sanitize(script.caption || '', 2200),
+        hashtags: Array.isArray(script.hashtags)
+          ? script.hashtags.filter(h => typeof h === 'string').slice(0, 10)
+          : [],
+      });
+    } catch(e) {
+      log(`Script error: ${e.message}`, 'ERROR');
+      sendJSON(res, 500, { error: 'Script generation failed' });
+    }
+    return;
+  }
+
+  // Queue script
+  if (req.method === 'POST' && url === '/api/queue') {
+    const s = requireAuth(req, res);
+    if (!s) return;
+    try {
+      const { script } = await readBody(req);
+      if (!script?.hook) throw new Error('Invalid script');
+      const item = {
+        id      : crypto.randomUUID(),
+        title   : sanitize(script.hook, 100),
+        platform: 'All Platforms',
+        status  : 'queued',
+        date    : new Date().toISOString(),
+      };
+      s.queue.push(item);
+      sendJSON(res, 200, item);
+    } catch(e) { sendJSON(res, 400, { error: e.message }); }
+    return;
+  }
+
+  // Delete queue item
+  if (req.method === 'DELETE' && url.startsWith('/api/queue/')) {
+    const s = requireAuth(req, res);
+    if (!s) return;
+    const rawId = url.split('/').pop();
+    const idx   = s.queue.findIndex(q => q.id === rawId);
+    if (idx === -1) { sendJSON(res, 404, { error: 'Not found' }); return; }
+    s.queue.splice(idx, 1);
+    sendJSON(res, 200, { success: true });
+    return;
+  }
+
+  sendJSON(res, 404, { error: 'Not found' });
+});
+
+server.listen(PORT, () => {
+  log(`FitBot Dashboard → http://localhost:${PORT}`);
+  log(`Video method    : Pexels stock clips + ffmpeg assembly (free, unlimited)`);
+  log(`AI primary      : ${AI.cerebras.key ? 'Cerebras 1M tokens/day ✓' : 'Not configured — add CEREBRAS_API_KEY'}`);
+  log(`AI fallback 1   : ${AI.groq.key ? 'Groq 14,400 req/day ✓' : 'Not configured'}`);
+  log(`AI fallback 2   : ${AI.openrouter.key ? 'OpenRouter 200 req/day ✓' : 'Not configured'}`);
+  log(`AI fallback 3   : ${process.env.GEMINI_API_KEY ? 'Gemini 1,500 req/day ✓' : 'Not configured'}`);
+});
