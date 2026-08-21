@@ -313,17 +313,29 @@ const server = http.createServer(async (req, res) => {
   const ip  = req.socket.remoteAddress || 'unknown';
   const url = req.url.split('?')[0];
 
-  // Serve frontend
+  // Serve frontend — try both possible paths
   if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
-    try {
-      const indexPath = path.join(__dirname, '..', 'index.html');
-      log(`[DEBUG] Serving index.html from: ${indexPath}`);
-      const html = fs.readFileSync(indexPath, 'utf8');
-      sendHTML(res, 200, html);
-    } catch(e) { 
-      log(`[ERROR] Failed to serve app: ${e.message}`, 'ERROR');
-      sendJSON(res, 500, { error: `Could not serve app: ${e.message}` }); 
+    const pathsToTry = [
+      path.join(__dirname, '..', 'index.html'),  // ../index.html (root of repo)
+      path.join(__dirname, 'index.html'),         // ./index.html (same dir as server.js)
+    ];
+
+    for (const tryPath of pathsToTry) {
+      try {
+        log(`[DEBUG] Attempting to read: ${tryPath}`);
+        const html = fs.readFileSync(tryPath, 'utf8');
+        log(`[DEBUG] ✓ Loaded from: ${tryPath}`);
+        sendHTML(res, 200, html);
+        return;
+      } catch(e) {
+        log(`[DEBUG] ✗ Failed at ${tryPath}: ${e.message}`);
+      }
     }
+
+    // If both paths fail, send error with debug info
+    const debugInfo = `Could not find index.html. Tried:\n1. ${pathsToTry[0]}\n2. ${pathsToTry[1]}\n\nCWD: ${process.cwd()}\n__dirname: ${__dirname}`;
+    log(`[ERROR] ${debugInfo}`, 'ERROR');
+    sendJSON(res, 500, { error: 'Could not serve app', debug: debugInfo });
     return;
   }
 
