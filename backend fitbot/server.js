@@ -49,7 +49,7 @@ const PWD_HASH = process.env.DASHBOARD_PASSWORD_HASH;
 const AI = {
   cerebras  : { key: process.env.CEREBRAS_API_KEY   || '', host: 'api.cerebras.ai',    path: '/v1/chat/completions',            models: ['llama-3.3-70b','llama3.1-70b','llama3.1-8b'] },
   groq      : { key: process.env.GROQ_API_KEY        || '', host: 'api.groq.com',       path: '/openai/v1/chat/completions',     models: ['llama-3.3-70b-versatile','llama3-70b-8192','llama-3.1-8b-instant'] },
-  openrouter: { key: process.env.OPENROUTER_API_KEY  || '', host: 'openrouter.ai',      path: '/api/v1/chat/completions',        models: ['meta-llama/llama-3.3-70b-instruct:free','deepseek/deepseek-v3:free'] },
+  openrouter: { key: process.env.OPENROUTER_API_KEY  || '', host: 'openrouter.ai',      path: '/api/v1/chat/completions',        models: ['meta-llama/llama-3.3-70b-instruct:free','deepseek/deepseek-chat:free'] },
 };
 
 // ── LOGGING ───────────────────────────────────────────────────
@@ -194,13 +194,13 @@ function callProvider(provider, prompt) {
 
 // Script cache — 7 pre-written scripts rotated by day of week
 const SCRIPT_CACHE = [
-  { hook: 'Stop wasting time on exercises that barely work.',           body: 'These 7 moves activate more muscle fibres in less time. Add them today and feel the difference in one week. No expensive equipment needed at all.',    cta: 'Save this and try it at your next session!',              caption: '7 exercises that build muscle fast 💪🔥',     hashtags: ['#fitness','#workout','#gym','#muscle','#gains']    },
-  { hook: 'You are training hard but the fat is not moving.',           body: 'The problem is not your workout — it is your recovery and sleep. Fix these first and watch everything change completely within weeks.',                 cta: 'Follow for more honest fitness tips every day.',          caption: 'The truth about fat loss nobody tells you 😮🔥', hashtags: ['#fatloss','#fitness','#health','#workout','#gym']   },
-  { hook: 'No time to train? Seven minutes is all you need.',           body: 'This circuit hits every major muscle group fast. No equipment, no gym, no excuses. Just 7 minutes and real results starting from day one.',             cta: 'Comment your results after 30 days below!',              caption: '7 minute workout that builds strength 🔥💪',   hashtags: ['#homeworkout','#fitness','#strength','#noequipment','#health'] },
-  { hook: 'Sore muscles are slowing your progress every single day.',   body: 'These 5 recovery moves reduce soreness significantly. Do them after every session and train harder the very next day without burning out at all.',     cta: 'Save this — you will need it after leg day!',            caption: '5 moves that speed up recovery 💪⚡',          hashtags: ['#recovery','#fitness','#gym','#workout','#health'] },
-  { hook: 'Steady state cardio is the slowest way to burn fat.',        body: 'Switch to this interval method and burn three times more calories in half the time. Your body composition will change faster than you ever expected.',   cta: 'Switch today and see real results in just 2 weeks!',     caption: 'You have been doing cardio wrong 🏃🔥',        hashtags: ['#cardio','#fatloss','#HIIT','#fitness','#workout'] },
-  { hook: 'Most people train legs wrong and never know it.',            body: 'They focus only on squats and miss three key muscle groups completely. Fix this technique today and your legs will grow twice as fast as before.',       cta: 'Tag someone who skips leg day — they need this!',        caption: 'You have been training legs wrong 😤🦵',       hashtags: ['#legday','#squats','#fitness','#gym','#muscle']    },
-  { hook: 'Bad posture makes you look weaker and feel worse every day.',body: 'These three exercises correct years of desk damage in just 10 minutes a day. Start tonight and feel taller and stronger by tomorrow morning.',          cta: 'Save this and do it before bed tonight!',                caption: 'Fix bad posture in 10 minutes a day 🙆💪',     hashtags: ['#posture','#fitness','#health','#workout','#gym']  },
+  { hook: 'Stop wasting time on exercises that barely work.',           body: 'These 7 moves activate more muscle fibres in less time. Add them today and feel the difference in one week. No expensive equipment needed.', cta: 'Start today.', caption: 'Transform your workout in one week 💪', hashtags: ['#fitness', '#workout', '#gym', '#gains', '#fitnessmotivation', '#training', '#bodybuilding', '#muscles'] },
+  { hook: 'You are training hard but the fat is not moving.',           body: 'The problem is not your workout — it is your recovery and sleep. Fix these first and watch everything change completely.', cta: 'Change your routine now.', caption: 'The secret to fat loss nobody talks about 🔥', hashtags: ['#weightloss', '#fatburning', '#diet', '#fitnessjourney', '#transformation', '#healthylifestyle', '#fitnessgains', '#beforeandafter'] },
+  { hook: 'No time to train? Seven minutes is all you need.',           body: 'This circuit hits every major muscle group fast. No equipment, no gym, no excuses. Just 7 minutes and real results start showing.', cta: 'Try the 7-minute challenge.', caption: 'Maximum results in minimum time ⏱️', hashtags: ['#quickworkout', '#fitnesshacks', '#homeworkout', '#nomEquipment', '#busylifestyle', '#fitnessmotivation', '#gains', '#timemanagement'] },
+  { hook: 'Sore muscles are slowing your progress every single day.',   body: 'These 5 recovery moves reduce soreness significantly. Do them after every session and train harder the very next day without pain.', cta: 'Recover like a pro.', caption: 'Stop being sore and train harder 💪🔥', hashtags: ['#recovery', '#stretching', '#musclesoreness', '#fitnesshealth', '#flexibility', '#yoga', '#trainingrecovery', '#fitnesscommunity'] },
+  { hook: 'Steady state cardio is the slowest way to burn fat.',        body: 'Switch to this interval method and burn three times more calories in half the time. Your body composition will change faster than ever.', cta: 'Burn fat efficiently.', caption: 'Forget long cardio sessions — do THIS instead 🔥', hashtags: ['#cardio', '#HIIT', '#fatburning', '#cardioworkout', '#fitness', '#abs', '#fitnesshacks', '#fastresults'] },
+  { hook: 'Most people train legs wrong and never know it.',            body: 'They focus only on squats and miss three key muscle groups completely. Fix this technique today and your legs will grow bigger and stronger fast.', cta: 'Build powerful legs.', caption: 'The leg training secret that changes everything 🦵', hashtags: ['#legday', '#legworkout', '#quads', '#squats', '#legmuscles', '#fitnesstraining', '#bodybuilding', '#gains'] },
+  { hook: 'Bad posture makes you look weaker and feel worse every day.',body: 'These three exercises correct years of desk damage in just 10 minutes a day. Start tonight and feel taller and stronger immediately.', cta: 'Fix your posture.', caption: 'Stand taller and feel stronger 💪', hashtags: ['#posture', '#backpain', '#flexibility', '#stretching', '#health', '#fitnesshacks', '#wellness', '#musclerecovery'] },
 ];
 
 function getCachedScript(topic) {
@@ -221,7 +221,7 @@ async function generateScript(topic, source) {
   const prompt = (
     `Fitness YouTube content for "Mhed Fitness & Sports".\n` +
     `Topic from ${safeSource}: "${safeTopic}"\n` +
-    `Return JSON: {"hook":"opening line max 100 chars","body":"3-4 sentences max 220 chars","cta":"call to action max 80 chars","caption":"caption with emojis max 400 chars","hashtags":["#tag1","#tag2","#tag3","#tag4","#tag5"]}`
+    `Return JSON: {"hook":"opening line max 100 chars","body":"3-4 sentences max 220 chars","cta":"call to action max 80 chars","caption":"caption with emojis max 400 chars","hashtags":["#tag1","#tag2"...]}`
   );
 
   // Try providers in priority order
@@ -316,9 +316,14 @@ const server = http.createServer(async (req, res) => {
   // Serve frontend
   if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
     try {
-      const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+      const indexPath = path.join(__dirname, '..', 'index.html');
+      log(`[DEBUG] Serving index.html from: ${indexPath}`);
+      const html = fs.readFileSync(indexPath, 'utf8');
       sendHTML(res, 200, html);
-    } catch { sendJSON(res, 500, { error: 'Could not serve app' }); }
+    } catch(e) { 
+      log(`[ERROR] Failed to serve app: ${e.message}`, 'ERROR');
+      sendJSON(res, 500, { error: `Could not serve app: ${e.message}` }); 
+    }
     return;
   }
 
